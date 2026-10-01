@@ -61,7 +61,7 @@ Adding a policy only requires another configuration entry; the graph control flo
 
 ## Weather Data
 
-The application resolves a city through Open-Meteo geocoding, converts it to latitude/longitude, and requests a forecast. Weather is normalized into temperature, wind, precipitation, precipitation probability, UV, timestamp, and a readable condition. Current questions use current conditions plus hourly rain probability/UV; future requests select a relevant hourly forecast.
+The application resolves a city through Open-Meteo geocoding, converts it to latitude/longitude, and requests a forecast. Weather is normalized into temperature, wind, precipitation, precipitation probability, UV, timestamp, and a readable condition. Explicit present-tense requests (`now`, `right now`, and `current`) use the current Open-Meteo snapshot, with rain probability and UV taken from the nearest current-hourly record. `today` uses a representative 13:00 local hourly forecast rather than treating the current instant as the whole day. `this morning`, `this afternoon`, and `this evening` use 09:00, 13:00, and 18:00 local time; tomorrow variants use the next local date at the same representative hour. If the exact hour is unavailable, the nearest available record on the requested local date is selected. All fields used for a forecast decision come from that same hourly record, and the returned Open-Meteo timestamp is preserved.
 
 ## Session Memory
 

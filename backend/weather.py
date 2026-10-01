@@ -31,6 +31,21 @@ def _nearest_hourly_index(times: list[str], target: str) -> int:
         return 0
 
 
+def _target_hour(requested: str) -> int:
+    if "morning" in requested:
+        return 9
+    if any(word in requested for word in ("evening", "tonight", "night", "later")):
+        return 18
+    return 13
+
+
+def _location_now(timezone_name: str) -> datetime:
+    try:
+        return datetime.now(ZoneInfo(timezone_name))
+    except (KeyError, ValueError):
+        return datetime.now(ZoneInfo("UTC"))
+
+
 def weather_condition(code: int) -> str:
     if code == 0: return "clear"
     if code in (1, 2, 3): return "cloudy"
@@ -44,34 +59,27 @@ def weather_condition(code: int) -> str:
 
 async def fetch_weather(latitude: float, longitude: float, requested_time: str = "now", client: httpx.AsyncClient | None = None) -> WeatherData:
     requested = (requested_time or "now").strip().lower()
-    future = requested not in {"", "now", "current", "today"}
+    current_request = requested in {"", "now", "right now", "current"}
     params = {"latitude": latitude, "longitude": longitude, "timezone": "auto", "forecast_days": 2}
-    if future:
-        params["hourly"] = "temperature_2m,wind_speed_10m,precipitation,rain,precipitation_probability,uv_index,weather_code"
-    else:
+    params["hourly"] = "temperature_2m,wind_speed_10m,precipitation,rain,precipitation_probability,uv_index,weather_code"
+    if current_request:
         params["current"] = "temperature_2m,wind_speed_10m,precipitation,weather_code"
-        params["hourly"] = "precipitation_probability,uv_index"
     owns_client = client is None
     client = client or httpx.AsyncClient(timeout=15)
     try:
         response = await client.get("https://api.open-meteo.com/v1/forecast", params=params)
         response.raise_for_status()
         payload = response.json()
-        if future:
+        if not current_request:
             hourly = payload["hourly"]
-            target_hour = 18 if any(word in requested for word in ("evening", "later", "night")) else 9 if "morning" in requested else 13 if "afternoon" in requested or "tomorrow" in requested else 13
             timezone_name = payload.get("timezone", "UTC")
-            try:
-                local_now = datetime.now(ZoneInfo(timezone_name))
-            except (KeyError, ValueError):
-                local_now = datetime.now(ZoneInfo("UTC"))
+            local_now = _location_now(timezone_name)
             target_date = (local_now + timedelta(days=1)).date() if "tomorrow" in requested else local_now.date()
             candidates = [i for i, value in enumerate(hourly["time"]) if value[:10] == target_date.isoformat()]
             if not candidates:
                 raise WeatherError("The requested forecast time is unavailable.")
-            if target_hour is not None:
-                index = min(candidates, key=lambda i: abs(int(hourly["time"][i][11:13]) - target_hour))
-            else: index = candidates[0]
+            target_hour = _target_hour(requested)
+            index = min(candidates, key=lambda i: abs(int(hourly["time"][i][11:13]) - target_hour))
             values = {key: hourly[key][index] for key in ("time", "temperature_2m", "wind_speed_10m", "precipitation", "precipitation_probability", "uv_index", "weather_code")}
         else:
             current = payload["current"]

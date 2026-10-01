@@ -247,8 +247,44 @@ async def t23():
                 "precipitation_probability": [90, 20, 40], "uv_index": [1, 5, 7]}}
     class Client:
         async def get(self, *args, **kwargs): return Response()
-    result = await weather.fetch_weather(28.6, 77.2, "today", client=Client())
+    result = await weather.fetch_weather(28.6, 77.2, "now", client=Client())
     assert result.precipitation_probability_pct == 20 and result.uv_index == 5
+
+
+async def t30():
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            times = [
+                "2026-10-02T09:00", "2026-10-02T13:00", "2026-10-02T18:00",
+                "2026-10-03T09:00", "2026-10-03T13:00", "2026-10-03T18:00",
+            ]
+            return {"timezone": "Asia/Kolkata", "hourly": {
+                "time": times,
+                "temperature_2m": [21, 31, 27, 20, 30, 26],
+                "wind_speed_10m": [3, 10, 6, 2, 9, 5],
+                "precipitation": [0, 1, 0, 0, 2, 0],
+                "precipitation_probability": [10, 40, 20, 5, 35, 15],
+                "uv_index": [2, 6, 1, 2, 7, 1],
+                "weather_code": [0, 61, 0, 0, 61, 0]}}
+    class Client:
+        async def get(self, *args, **kwargs): return Response()
+    expected = {
+        "today": "2026-10-02T13:00",
+        "this morning": "2026-10-02T09:00",
+        "this afternoon": "2026-10-02T13:00",
+        "this evening": "2026-10-02T18:00",
+        "tomorrow": "2026-10-03T13:00",
+        "tomorrow morning": "2026-10-03T09:00",
+        "tomorrow afternoon": "2026-10-03T13:00",
+        "tomorrow evening": "2026-10-03T18:00",
+    }
+    with patch("backend.weather.datetime") as clock:
+        clock.now.return_value = __import__("datetime").datetime(2026, 10, 2, 3, 15)
+        for requested, timestamp in expected.items():
+            result = await weather.fetch_weather(19, 72, requested, client=Client())
+            assert result.timestamp == timestamp
+    assert result.temperature_c == 26 and result.wind_speed_kmh == 5
 
 
 def t24():
@@ -310,7 +346,7 @@ def live_severe():
     return asyncio.run(run())
 
 
-TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16), ("T17", t17), ("T18", t18), ("T19", t19), ("T20", t20), ("T21", t21), ("T22", t22), ("T23", t23), ("T24", t24), ("T25", t25), ("T26", t26), ("T27", t27), ("T28", t28), ("T29", t29)]
+TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16), ("T17", t17), ("T18", t18), ("T19", t19), ("T20", t20), ("T21", t21), ("T22", t22), ("T23", t23), ("T24", t24), ("T25", t25), ("T26", t26), ("T27", t27), ("T28", t28), ("T29", t29), ("T30", t30)]
 
 def main():
     print("Weather Advisory Bot — Evaluation Results")
