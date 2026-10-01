@@ -228,6 +228,29 @@ def t21():
         graph.ChatGoogleGenerativeAI = original_model
 
 
+def t22():
+    for activity in ("picnic", "cycling", "running", "walking", "hiking"):
+        _, _, selected = evaluate_sop(activity, case_weather(weather_condition="thunderstorm"))
+        assert selected["id"] == "SOP-011" and selected["severity"] == "HIGH"
+    _, _, selected = evaluate_sop("unknown", case_weather(weather_condition="thunderstorm"))
+    assert selected is None
+
+
+async def t23():
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"timezone": "Asia/Kolkata", "current": {
+                "time": "2026-10-02T10:00", "temperature_2m": 26, "wind_speed_10m": 4,
+                "precipitation": 0, "weather_code": 0}, "hourly": {
+                "time": ["2026-10-02T08:00", "2026-10-02T10:00", "2026-10-02T12:00"],
+                "precipitation_probability": [90, 20, 40], "uv_index": [1, 5, 7]}}
+    class Client:
+        async def get(self, *args, **kwargs): return Response()
+    result = await weather.fetch_weather(28.6, 77.2, "today", client=Client())
+    assert result.precipitation_probability_pct == 20 and result.uv_index == 5
+
+
 def live_severe():
     candidates = [("Reykjavik", 64.15, -21.94), ("Wellington", -41.29, 174.78), ("Sapporo", 43.06, 141.35), ("Bhopal", 23.26, 77.41)]
     async def run():
@@ -243,7 +266,7 @@ def live_severe():
     return asyncio.run(run())
 
 
-TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16), ("T17", t17), ("T18", t18), ("T19", t19), ("T20", t20), ("T21", t21)]
+TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16), ("T17", t17), ("T18", t18), ("T19", t19), ("T20", t20), ("T21", t21), ("T22", t22), ("T23", t23)]
 
 def main():
     print("Weather Advisory Bot — Evaluation Results")

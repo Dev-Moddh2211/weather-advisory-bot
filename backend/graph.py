@@ -24,6 +24,8 @@ class Intent(BaseModel):
     location: str | None = None
     requested_time: str = "now"
     is_follow_up: bool = False
+    activity_confidence: float | None = Field(default=None, ge=0, le=1)
+    activity_is_ambiguous: bool = False
 
 
 def analyze_question(state: AdvisoryState) -> dict[str, Any]:
@@ -44,8 +46,10 @@ def analyze_question(state: AdvisoryState) -> dict[str, Any]:
     prompt = f"""
 Extract request context only; never provide safety advice and never evaluate a policy.
 
-Return activity as one canonical activity from this repository-supported vocabulary when
-the user's meaning clearly matches one of them: {supported_activities}.
+    Return activity as one canonical activity from this repository-supported vocabulary when
+    the user's meaning clearly matches one of them: {supported_activities}. If the request
+    names an unsupported activity such as fishing, preserve that distinction by returning
+    null rather than mapping it to a supported activity.
 Normalize paraphrases to the underlying activity rather than copying surface wording.
 For example, an outdoor meal or spending time outside with food and friends can mean
 the canonical activity 'picnic' when that is clearly the request. Do not classify every
@@ -53,7 +57,11 @@ outdoor activity as a picnic: cycling, running, walking, fishing, and an unspeci
 request to go outside remain distinct or null. If the activity is genuinely ambiguous,
 return null. Do not invent activities, SOP IDs, rules, weather values, or recommendations.
 
-Previous turns: {previous}
+    Include activity_confidence from 0 to 1 and set activity_is_ambiguous=true when the
+    activity is unclear. Do not claim high confidence for a vague request such as merely
+    spending time outside.
+
+    Previous turns: {previous}
 Latest message: {message}
 """
     try:
@@ -61,6 +69,12 @@ Latest message: {message}
     except GeminiUnavailableError as exc:
         return {"error_type": "gemini", "error": str(exc)}
     values = intent.model_dump(exclude_none=True)
+    supported = set(supported_activities)
+    activity = values.get("activity")
+    if values.get("activity_is_ambiguous") or (activity and activity not in supported):
+        values["activity"] = None
+    if values.get("activity_confidence") is not None and values["activity_confidence"] < 0.6:
+        values["activity"] = None
     if not values.get("location") and state.get("location"): values["location"] = state["location"]
     if not values.get("activity") and state.get("activity"): values["activity"] = state["activity"]
     return values

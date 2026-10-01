@@ -20,6 +20,17 @@ class WeatherError(RuntimeError):
     pass
 
 
+def _nearest_hourly_index(times: list[str], target: str) -> int:
+    try:
+        target_time = datetime.fromisoformat(target)
+        return min(
+            range(len(times)),
+            key=lambda index: abs(datetime.fromisoformat(times[index]) - target_time),
+        )
+    except (ValueError, TypeError):
+        return 0
+
+
 def weather_condition(code: int) -> str:
     if code == 0: return "clear"
     if code in (1, 2, 3): return "cloudy"
@@ -65,7 +76,9 @@ async def fetch_weather(latitude: float, longitude: float, requested_time: str =
         else:
             current = payload["current"]
             hourly = payload.get("hourly", {})
-            values = {"time": current["time"], "temperature_2m": current["temperature_2m"], "wind_speed_10m": current["wind_speed_10m"], "precipitation": current["precipitation"], "precipitation_probability": hourly.get("precipitation_probability", [0])[0], "uv_index": hourly.get("uv_index", [0])[0], "weather_code": current["weather_code"]}
+            hourly_times = hourly.get("time", [])
+            hourly_index = _nearest_hourly_index(hourly_times, current["time"]) if hourly_times else 0
+            values = {"time": current["time"], "temperature_2m": current["temperature_2m"], "wind_speed_10m": current["wind_speed_10m"], "precipitation": current["precipitation"], "precipitation_probability": hourly.get("precipitation_probability", [0])[hourly_index], "uv_index": hourly.get("uv_index", [0])[hourly_index], "weather_code": current["weather_code"]}
         return WeatherData(timestamp=values["time"], temperature_c=values["temperature_2m"], wind_speed_kmh=values["wind_speed_10m"], precipitation_mm=values["precipitation"], precipitation_probability_pct=values["precipitation_probability"], uv_index=values["uv_index"], weather_condition=weather_condition(values["weather_code"]))
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
         raise WeatherError("Live weather could not be retrieved.") from exc

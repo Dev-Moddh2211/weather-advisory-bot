@@ -27,17 +27,28 @@ def _condition(condition: dict[str, Any], context: dict[str, Any], weather: dict
     return False
 
 
-def _matches(sop: dict[str, Any], context: dict[str, Any], weather: dict[str, Any]) -> bool:
+def _matches(sop: dict[str, Any], context: dict[str, Any], weather: dict[str, Any], known_activities: set[str]) -> bool:
     conditions = sop.get("conditions", {})
     for key, values in (("activity_any", [context.get("activity")]), ("intent_any", [context.get("intent")]), ("group_any", [context.get("user_group")])):
-        if key in conditions and not any(ALIASES.get(value, value) in [ALIASES.get(item, item) for item in conditions[key]] for value in values if value): return False
+        if key in conditions:
+            allowed = [ALIASES.get(item, item) for item in conditions[key]]
+            matches_outdoor_scope = key == "activity_any" and "outdoor_activity" in allowed and any(
+                ALIASES.get(value, value) in known_activities for value in values if value
+            )
+            if not matches_outdoor_scope and not any(ALIASES.get(value, value) in allowed for value in values if value): return False
     if "all" in conditions and not all(_condition(item, context, weather) for item in conditions["all"]): return False
     if "any" in conditions and not any(_condition(item, context, weather) for item in conditions["any"]): return False
     return True
 
 
 def match_sops(context: dict[str, Any], weather: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
-    return [sop for sop in config["sops"] if _matches(sop, context, weather)]
+    known_activities = {
+        ALIASES.get(activity, activity)
+        for sop in config["sops"]
+        for activity in sop.get("conditions", {}).get("activity_any", [])
+        if activity != "outdoor_activity"
+    }
+    return [sop for sop in config["sops"] if _matches(sop, context, weather, known_activities)]
 
 
 def select_sop(matches: list[dict[str, Any]], severity_order: dict[str, int]) -> dict[str, Any] | None:

@@ -172,7 +172,7 @@ sops:
     category: General Outdoor Activities
     description: Stop outdoor activities when thunderstorm conditions are present.
     conditions:
-      activity_any: [picnic, sports, gardening, sightseeing, outdoor_event]
+      activity_any: [outdoor_activity]
       all:
         - field: weather_condition
           operator: equals
