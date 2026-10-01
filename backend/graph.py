@@ -7,7 +7,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 from .geocoding import GeocodingError, geocode_location
-from .gemini import GeminiUnavailableError, gemini_model_name, invoke_gemini
+from .gemini import GeminiConfigurationError, GeminiUnavailableError, gemini_model_name, invoke_gemini
 from .response_generator import generate_response
 from .sop_loader import load_sops
 from .sop_matcher import match_sops, select_sop
@@ -28,9 +28,13 @@ class Intent(BaseModel):
 
 def analyze_question(state: AdvisoryState) -> dict[str, Any]:
     message = state["messages"][-1].content if hasattr(state["messages"][-1], "content") else state["messages"][-1]["content"]
+    try:
+        model_name = gemini_model_name()
+    except GeminiConfigurationError as exc:
+        return {"error_type": "configuration", "error": str(exc)}
     if not os.getenv("GEMINI_API_KEY"):
         return {"error_type": "configuration", "error": "GEMINI_API_KEY is not configured."}
-    model = ChatGoogleGenerativeAI(model=gemini_model_name(), temperature=0, thinking_level="low").with_structured_output(Intent)
+    model = ChatGoogleGenerativeAI(model=model_name, temperature=0, thinking_level="low").with_structured_output(Intent)
     previous = state.get("messages", [])[:-1]
     prompt = f"Extract context only, never safety advice. Previous turns: {previous}\nLatest message: {message}"
     try:
@@ -68,6 +72,8 @@ def route_sop(state: AdvisoryState) -> str: return "found" if state.get("selecte
 def response_node(state: AdvisoryState) -> dict[str, str]:
     try:
         return {"answer": generate_response(state)}
+    except GeminiConfigurationError as exc:
+        return {"error_type": "configuration", "error": str(exc), "answer": str(exc)}
     except GeminiUnavailableError as exc:
         return {"error_type": "gemini", "error": str(exc), "answer": str(exc)}
 def error_node(state: AdvisoryState) -> dict[str, str]: return {"answer": state.get("error", "The request could not be completed.")}

@@ -6,6 +6,11 @@ import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 T = TypeVar("T")
 
@@ -15,6 +20,10 @@ GEMINI_RETRY_BASE_SECONDS = 1.0
 
 class GeminiUnavailableError(RuntimeError):
     """Raised when Gemini remains unavailable after bounded retries."""
+
+
+class GeminiConfigurationError(RuntimeError):
+    """Raised when the required Gemini configuration is missing."""
 
 
 def _is_transient_error(exc: Exception) -> bool:
@@ -55,4 +64,8 @@ def invoke_gemini(invoke: Callable[[], T]) -> T:
 
 
 def gemini_model_name() -> str:
-    return os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    model_name = os.getenv("GEMINI_MODEL", "").strip()
+    if not model_name:
+        raise GeminiConfigurationError("GEMINI_MODEL is not configured.")
+    print(f">>> GEMINI_MODEL = {model_name!r}")
+    return model_name

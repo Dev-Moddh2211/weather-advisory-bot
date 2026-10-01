@@ -100,6 +100,18 @@ The evaluator covers deterministic SOP matching, paraphrased and adversarial req
 
 It also probes candidate locations against live Open-Meteo data for a current HIGH-severity condition. That case is skipped when no candidate meets the policy or the service is unavailable; it does not fabricate weather.
 
+### Mocked versus live checks
+
+`evals/run_evals.py` is the automated evaluator. Its normal cases use fixtures and monkeypatches; for example, the session-memory case replaces intent extraction, geocoding, weather, and response generation. It does not call Gemini or `POST /chat`. The separate `evals/test_unreachable_weather.py` check deliberately mocks an unreachable weather node and verifies that the graph returns a weather error before SOP matching, rather than treating the failure as no matching policy.
+
+For local live verification, start the backend with the real `.env`, then run:
+
+```bash
+python3 scripts/live_integration.py
+```
+
+This script calls the running `POST /chat` endpoint for a Delhi picnic and a Bhopal cycling request. It does not mock Gemini, Open-Meteo, or the backend. It prints the configured model name only (never the API key), the HTTP status, live weather, selected SOP, and final advisory. The Bhopal case expects no applicable SOP under the live conditions; if current weather matches a cycling policy, the check fails rather than fabricating or overriding the result.
+
 ## Scope
 
 There is no authentication, database, account system, or deployment configuration. The backend and frontend are intended for local running and review.

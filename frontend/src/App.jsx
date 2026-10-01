@@ -24,7 +24,14 @@ function weatherLabel(requestedTime) {
   return 'Weather used for this advisory';
 }
 
-function WeatherSummary({ weather, requestedTime }) {
+function formatTimestamp(value) {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(parsed);
+}
+
+function WeatherSummary({ weather, requestedTime, hasPolicy }) {
   if (!weather) return null;
   const values = [
     ['Temperature', `${weather.temperature_c}°C`],
@@ -33,17 +40,17 @@ function WeatherSummary({ weather, requestedTime }) {
     ['Rain chance', `${weather.precipitation_probability_pct}%`],
     ['UV', weather.uv_index],
     ['Condition', weather.weather_condition ? weather.weather_condition[0].toUpperCase() + weather.weather_condition.slice(1) : '—'],
-    ['Timestamp', weather.timestamp],
+    ['Timestamp', formatTimestamp(weather.timestamp)],
   ];
   return <section className="weather-meta" aria-label={weatherLabel(requestedTime)}>
-    <div className="section-label">{weatherLabel(requestedTime)}</div>
+    <div className="section-label">{hasPolicy ? weatherLabel(requestedTime) : 'Weather checked'}</div>
     <div className="weather-grid">{values.map(([label, value]) => <div className="weather-value" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
   </section>;
 }
 
 function PolicySummary({ data }) {
   if (data.error_type) return null;
-  if (data.sop_id == null && !data.matched_sops?.length) return <section className="policy-meta no-policy" aria-label="No matching policy"><div className="section-label">No matching policy</div></section>;
+  if (data.sop_id == null && !data.matched_sops?.length) return <div className="no-policy" aria-label="No matching policy"><span aria-hidden="true">•</span> No matching policy</div>;
   return <section className="policy-meta" aria-label="Policy used">
     <div className="section-label">Policy used</div>
     <div className="policy-row"><div><strong>{data.sop_id || 'No selected SOP'}</strong>{data.selected_sop?.name && <small>{data.selected_sop.name}</small>}</div>{data.severity && <span className={`severity ${data.severity.toLowerCase()}`}>{data.severity}</span>}</div>
@@ -54,7 +61,7 @@ function Message({ message }) {
   if (message.role === 'user') return <div className="message user"><p>{message.content}</p></div>;
   return <article className={`message assistant ${message.error ? 'error' : ''}`}>
     <div className="assistant-label">Advisory</div><p>{message.content}</p>
-    {message.data && <><WeatherSummary weather={message.data.weather} requestedTime={message.data.requested_time} /><PolicySummary data={message.data} /></>}
+    {message.data && <><WeatherSummary weather={message.data.weather} requestedTime={message.data.requested_time} hasPolicy={Boolean(message.data.sop_id)} /><PolicySummary data={message.data} /></>}
   </article>;
 }
 
@@ -91,7 +98,7 @@ export default function App() {
     } finally { setLoading(false); }
   }
 
-  return <main className="app-shell"><header className="topbar"><div className="brand-kicker">WEATHER ADVISORY</div><div className="brand-title">Weather Advisory</div></header>
+  return <main className="app-shell"><header className="topbar"><div className="brand-title">Weather Advisory</div></header>
     <section className="conversation" ref={conversationRef} aria-live="polite">
       {messages.length === 0 ? <EmptyState onSuggestion={prompt => submit(null, prompt)} /> : <div className="reading-column">{messages.map((message, index) => <Message message={message} key={`${message.role}-${index}`} />)}{loading && <div className="message assistant loading-message"><div className="assistant-label">Advisory</div><p><span className="thinking-dots"><i /> <i /> <i /></span><span className="sr-only">Checking live weather</span></p></div>}</div>}
     </section>
