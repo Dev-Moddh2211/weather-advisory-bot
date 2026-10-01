@@ -1,0 +1,90 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { sendChatMessage } from './services/chatApi';
+
+const suggestions = [
+  'Is it safe to go running in Ahmedabad right now?',
+  'Can I cycle to work today?',
+  'Is it safe to fly a kite this afternoon?',
+  'Can I have a picnic this evening?',
+];
+
+function getSessionId() {
+  const key = 'weather-advisory-session-id';
+  let id = sessionStorage.getItem(key);
+  if (!id) { id = crypto.randomUUID(); sessionStorage.setItem(key, id); }
+  return id;
+}
+
+function WeatherSummary({ weather }) {
+  if (!weather) return null;
+  const values = [
+    ['Temperature', `${weather.temperature_c}°C`],
+    ['Wind', `${weather.wind_speed_kmh} km/h`],
+    ['Rain', `${weather.precipitation_mm} mm`],
+    ['Rain chance', `${weather.precipitation_probability_pct}%`],
+    ['UV', weather.uv_index],
+    ['Condition', weather.weather_condition],
+  ];
+  return <section className="weather-meta" aria-label="Current weather">
+    <div className="section-label">Current weather</div>
+    <div className="weather-grid">{values.map(([label, value]) => <div className="weather-value" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+  </section>;
+}
+
+function PolicySummary({ data }) {
+  if (data.error_type) return null;
+  if (data.sop_id == null && !data.matched_sops?.length) return <div className="no-guidance">No applicable policy matched these conditions.</div>;
+  return <section className="policy-meta" aria-label="Policy used">
+    <div className="section-label">Policy used</div>
+    <div className="policy-row"><strong>{data.sop_id || 'No selected SOP'}</strong>{data.severity && <span className={`severity ${data.severity.toLowerCase()}`}>{data.severity}</span>}</div>
+  </section>;
+}
+
+function Message({ message }) {
+  if (message.role === 'user') return <div className="message user"><p>{message.content}</p></div>;
+  return <article className={`message assistant ${message.error ? 'error' : ''}`}>
+    <div className="assistant-label">Advisory</div><p>{message.content}</p>
+    {message.data && <><WeatherSummary weather={message.data.weather} /><PolicySummary data={message.data} /></>}
+  </article>;
+}
+
+function EmptyState({ onSuggestion }) {
+  return <div className="empty-state"><div className="empty-mark" aria-hidden="true">◌</div><h2>Ask about outdoor conditions</h2><p>Get practical guidance based on the latest weather and written safety policies.</p><div className="suggestions">{suggestions.map(prompt => <button type="button" className="suggestion" key={prompt} onClick={() => onSuggestion(prompt)}>{prompt}<span aria-hidden="true">↗</span></button>)}</div></div>;
+}
+
+function Composer({ value, onChange, onSubmit, loading }) {
+  const ref = useRef(null);
+  useEffect(() => { if (ref.current) { ref.current.style.height = 'auto'; ref.current.style.height = `${Math.min(ref.current.scrollHeight, 144)}px`; } }, [value]);
+  function handleKeyDown(event) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); onSubmit(event); } }
+  return <form className="composer" onSubmit={onSubmit}><textarea ref={ref} value={value} onChange={event => onChange(event.target.value)} onKeyDown={handleKeyDown} placeholder="Type your weather or activity question..." disabled={loading} rows="1" aria-label="Weather question" /><button className="send" aria-label="Send question" disabled={loading || !value.trim()}><span aria-hidden="true">↑</span></button><div className="composer-hint">Enter to send · Shift + Enter for a new line</div></form>;
+}
+
+export default function App() {
+  const sessionId = useMemo(getSessionId, []);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const conversationRef = useRef(null);
+
+  useEffect(() => { const node = conversationRef.current; if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' }); }, [messages, loading]);
+
+  async function submit(event, suggestedMessage) {
+    event?.preventDefault();
+    const message = (suggestedMessage ?? input).trim();
+    if (!message || loading) return;
+    setInput(''); setMessages(current => [...current, { role: 'user', content: message }]); setLoading(true);
+    try {
+      const data = await sendChatMessage(sessionId, message);
+      setMessages(current => [...current, { role: 'assistant', content: data.answer || data.error || 'No response received.', data, error: Boolean(data.error_type) }]);
+    } catch (error) {
+      setMessages(current => [...current, { role: 'assistant', content: error.message, error: true }]);
+    } finally { setLoading(false); }
+  }
+
+  return <main className="app-shell"><header className="topbar"><div className="brand-kicker">WEATHER ADVISORY</div><div className="brand-title">Weather Advisory</div></header>
+    <section className="conversation" ref={conversationRef} aria-live="polite">
+      {messages.length === 0 ? <EmptyState onSuggestion={prompt => submit(null, prompt)} /> : <div className="reading-column">{messages.map((message, index) => <Message message={message} key={`${message.role}-${index}`} />)}{loading && <div className="message assistant loading-message"><div className="assistant-label">Advisory</div><p><span className="thinking-dots"><i /> <i /> <i /></span><span className="sr-only">Checking live weather</span></p></div>}</div>}
+    </section>
+    <Composer value={input} onChange={setInput} onSubmit={submit} loading={loading} />
+  </main>;
+}

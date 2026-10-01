@@ -1,0 +1,200 @@
+# Project-defined starting policies. Thresholds are intentionally human-reviewable;
+# they are not claimed to be official weather-safety standards.
+schema_version: 1
+severity_order:
+  LOW: 1
+  MODERATE: 2
+  HIGH: 3
+
+sops:
+  - id: SOP-001
+    name: Strong wind while cycling
+    category: Outdoor Exercise
+    description: Strong winds can make bicycle control more difficult.
+    policy_note: >
+      Kept intentionally strict because this policy is specifically about
+      bicycle control in strong wind.
+    conditions:
+      activity_any: [cycling, bicycling, bike_ride]
+      all:
+        - field: wind_speed_kmh
+          operator: ">"
+          value: 35
+    severity: HIGH
+    advice: Avoid cycling while the wind is this strong. Consider riding later or using an indoor option.
+    priority: 90
+
+  - id: SOP-002
+    name: Strenuous exercise in hot weather
+    category: Outdoor Exercise
+    description: Reduce or avoid hard outdoor exercise in very hot conditions.
+    conditions:
+      activity_any: [running, jogging, hiking, cycling, workout, outdoor_workout]
+      all:
+        - field: temperature_c
+          operator: ">="
+          value: 35
+    severity: HIGH
+    advice: Skip a hard outdoor workout in this heat. Try a cooler time of day or move the workout indoors.
+    priority: 85
+
+  - id: SOP-003
+    name: Moderate heat exercise adjustment
+    category: Outdoor Exercise
+    description: Reduce intensity when exercise is planned in warm conditions.
+    conditions:
+      activity_any: [running, jogging, hiking, cycling, workout, outdoor_workout]
+      all:
+        - field: temperature_c
+          operator: between
+          min: 30
+          max: 34.9
+    severity: MODERATE
+    advice: Exercise at reduced intensity, take frequent breaks, and prefer a cooler part of the day.
+    priority: 60
+
+  - id: SOP-004
+    name: Heavy-rain travel warning
+    category: Travel
+    description: Discourage non-essential travel when heavy rain is expected.
+    conditions:
+      intent_any: [travel, commute, driving]
+      all:
+        - field: precipitation_probability_pct
+          operator: ">="
+          value: 80
+        - field: precipitation_mm
+          operator: ">="
+          value: 10
+    severity: HIGH
+    advice: Delay the trip if you can. If you need to travel, leave extra time and expect conditions to be slower than usual.
+    priority: 80
+
+  - id: SOP-005
+    name: Strong-wind driving caution
+    category: Travel
+    description: Add caution for driving in strong wind even without heavy rain.
+    conditions:
+      intent_any: [travel, commute, driving]
+      all:
+        - field: wind_speed_kmh
+          operator: ">"
+          value: 45
+    severity: MODERATE
+    advice: Consider delaying driving and avoid exposed routes; if you travel, drive slowly and keep both hands on the wheel.
+    priority: 70
+
+  - id: SOP-006
+    name: Thunderstorm travel restriction
+    category: Travel
+    description: Avoid starting non-essential travel when thunderstorms are present or expected.
+    conditions:
+      intent_any: [travel, commute, driving, walking]
+      any:
+        - field: weather_condition
+          operator: equals
+          value: thunderstorm
+    severity: HIGH
+    advice: Delay non-essential travel until the thunderstorm has passed and check conditions again before leaving.
+    priority: 95
+
+  - id: SOP-007
+    name: Heat and older adults
+    category: Vulnerable Groups
+    description: Add stronger heat precautions for older adults.
+    conditions:
+      group_any: [older_adult, senior]
+      all:
+        - field: temperature_c
+          operator: ">="
+          value: 32
+    severity: MODERATE
+    advice: Avoid prolonged outdoor exposure during the hottest hours; use shade, hydration, and a cooler alternative.
+    priority: 88
+
+  - id: SOP-008
+    name: Cold weather and children
+    category: Vulnerable Groups
+    description: Limit extended outdoor activity for children in cold conditions.
+    conditions:
+      group_any: [child, infant]
+      all:
+        - field: temperature_c
+          operator: "<"
+          value: 5
+    severity: MODERATE
+    advice: Keep outdoor time brief, use warm layers, and choose an indoor alternative for extended activity.
+    priority: 75
+
+  - id: SOP-009
+    name: Child outdoor activity in heavy rain
+    category: Vulnerable Groups
+    description: Limit outdoor activity for children when substantial rain is likely.
+    conditions:
+      group_any: [child, infant]
+      all:
+        - field: precipitation_probability_pct
+          operator: ">="
+          value: 70
+        - field: precipitation_mm
+          operator: ">="
+          value: 5
+    severity: HIGH
+    advice: Choose an indoor activity while heavy rain is likely.
+    priority: 85
+
+  - id: SOP-010
+    name: Suitable conditions for a picnic
+    category: General Outdoor Activities
+    description: A picnic is more suitable when rain is unlikely, winds are light, and the temperature is comfortable.
+    policy_note: >
+      This policy intentionally combines several weather factors because
+      "good for a picnic" does not have one obvious threshold.
+    conditions:
+      activity_any: [picnic]
+      all:
+        - field: temperature_c
+          operator: between
+          min: 15
+          max: 30
+        - field: precipitation_probability_pct
+          operator: "<"
+          value: 30
+        - field: wind_speed_kmh
+          operator: "<"
+          value: 25
+    severity: LOW
+    advice: This looks like a reasonable day for a picnic. Take basic sun or rain protection and check the forecast again before you leave.
+    priority: 40
+
+  - id: SOP-011
+    name: Outdoor activity during thunderstorms
+    category: General Outdoor Activities
+    description: Stop outdoor activities when thunderstorm conditions are present.
+    conditions:
+      activity_any: [picnic, sports, gardening, sightseeing, outdoor_event]
+      all:
+        - field: weather_condition
+          operator: equals
+          value: thunderstorm
+    severity: HIGH
+    advice: Move the activity indoors or wait until the storm has passed.
+    priority: 100
+
+  - id: SOP-012
+    name: Light-rain general outdoor activity
+    category: General Outdoor Activities
+    description: Permit ordinary outdoor activity with practical rain preparation when rain is light.
+    conditions:
+      activity_any: [walking, gardening, sightseeing, outdoor_event]
+      all:
+        - field: precipitation_probability_pct
+          operator: between
+          min: 30
+          max: 70
+        - field: precipitation_mm
+          operator: "<"
+          value: 5
+    severity: LOW
+    advice: The activity may be reasonable with rain protection; have a sheltered alternative available.
+    priority: 30
