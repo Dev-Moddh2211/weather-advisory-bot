@@ -1,25 +1,25 @@
 import os
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .graph import build_graph
 
-DEFAULT_CORS_ORIGINS = (
-    "http://localhost:5173,http://127.0.0.1:5173,"
-    "https://weather-advisory-bot-kappa.vercel.app"
-)
+logger = logging.getLogger(__name__)
 
-
-def cors_origins() -> list[str]:
-    configured = os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS)
-    return [origin.strip().rstrip("/") for origin in configured.split(",") if origin.strip()]
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+logger.info("CORS origins: %s", cors_origins)
 
 
 app = FastAPI(title="Weather Advisory Bot")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins(),
+    allow_origins=cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
