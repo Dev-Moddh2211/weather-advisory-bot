@@ -111,14 +111,20 @@ async def t10():
     async def fake_geo(location): return GeocodingResult(name=location or "Bhopal", latitude=23.25, longitude=77.41)
     async def fake_weather(*args, **kwargs): return weather.WeatherData(**case_weather())
     def fake_analyze(state):
-        previous = len(state.get("messages", [])) > 1
-        return {"activity": "cycling", "intent": "exercise", "location": "Bhopal", "requested_time": "evening" if previous else "today", "is_follow_up": previous}
+        latest_message = state["messages"][-1]
+        latest = latest_message.content if hasattr(latest_message, "content") else latest_message["content"]
+        requested_time = "tomorrow morning" if "tomorrow" in latest else "evening" if "evening" in latest else "today"
+        previous = requested_time != "today"
+        return {"activity": "cycling", "intent": "exercise", "location": "Bhopal", "requested_time": requested_time, "is_follow_up": previous}
     graph.analyze_question, graph.geocode_location, graph.fetch_weather, graph.generate_response = fake_analyze, fake_geo, fake_weather, lambda state: "fixture response"
     try:
         workflow = graph.build_graph(); config = {"configurable": {"thread_id": "eval-session"}}
         first = await workflow.ainvoke({"messages": [{"role": "user", "content": "cycle in Bhopal"}]}, config=config)
         second = await workflow.ainvoke({"messages": [{"role": "user", "content": "what about evening?"}]}, config=config)
-        assert first["location"] == second["location"] == "Bhopal" and second["requested_time"] == "evening"
+        third = await workflow.ainvoke({"messages": [{"role": "user", "content": "what about tomorrow morning?"}]}, config=config)
+        assert first["location"] == second["location"] == third["location"] == "Bhopal"
+        assert first["activity"] == second["activity"] == third["activity"] == "cycling"
+        assert second["requested_time"] == "evening" and third["requested_time"] == "tomorrow morning"
     finally: graph.analyze_question, graph.geocode_location, graph.fetch_weather, graph.generate_response = original_analyze, original_geo, original_weather, original_response
 
 
@@ -175,6 +181,53 @@ def t16():
     assert answer == state["selected_sop"]["advice"] and "Policy" not in answer and "Current conditions" not in answer
 
 
+def t17():
+    _, matches, selected = evaluate_sop("picnic", case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=10))
+    assert selected["id"] == "SOP-010"
+    assert "SOP-011" not in [item["id"] for item in matches]
+
+
+def t18():
+    for activity in ("cycling", "running", "fishing", "walking"):
+        _, matches, _ = evaluate_sop(activity, case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=10))
+        assert "SOP-010" not in [item["id"] for item in matches], activity
+
+
+def t19():
+    _, matches, selected = evaluate_sop("picnic", case_weather(temperature_c=35, wind_speed_kmh=8, precipitation_probability_pct=10))
+    assert "SOP-010" not in [item["id"] for item in matches]
+    assert selected is None
+
+
+def t20():
+    """Severe-weather policy path is deterministic and activity-scoped."""
+    _, matches, selected = evaluate_sop("picnic", case_weather(weather_condition="thunderstorm"))
+    assert selected["id"] == "SOP-011" and selected["severity"] == "HIGH"
+    assert "SOP-010" not in [item["id"] for item in matches]
+
+
+def t21():
+    """The analysis prompt exposes canonical SOP activities without policy authority."""
+    captured = {}
+
+    class FakeModel:
+        def with_structured_output(self, _schema): return self
+        def invoke(self, prompt):
+            captured["prompt"] = prompt
+            return graph.Intent(activity="picnic", location="Delhi", requested_time="today")
+
+    original_model = graph.ChatGoogleGenerativeAI
+    graph.ChatGoogleGenerativeAI = lambda **kwargs: FakeModel()
+    try:
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "fixture", "GEMINI_MODEL": "fixture-model"}):
+            result = graph.analyze_question({"messages": [{"role": "user", "content": "outdoor lunch with friends in Delhi"}]})
+        assert result["activity"] == "picnic"
+        assert "picnic" in captured["prompt"]
+        assert "never provide safety advice" in captured["prompt"]
+    finally:
+        graph.ChatGoogleGenerativeAI = original_model
+
+
 def live_severe():
     candidates = [("Reykjavik", 64.15, -21.94), ("Wellington", -41.29, 174.78), ("Sapporo", 43.06, 141.35), ("Bhopal", 23.26, 77.41)]
     async def run():
@@ -190,7 +243,7 @@ def live_severe():
     return asyncio.run(run())
 
 
-TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16)]
+TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16), ("T17", t17), ("T18", t18), ("T19", t19), ("T20", t20), ("T21", t21)]
 
 def main():
     print("Weather Advisory Bot — Evaluation Results")

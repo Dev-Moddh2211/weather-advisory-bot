@@ -34,6 +34,11 @@ Policies live in [`sops/sops.yaml`](sops/sops.yaml). The current configuration h
 
 All matching policies are retained. The highest severity wins; numeric priority breaks ties. Selection is deterministic and does not ask Gemini to choose a policy.
 
+This is an explicit severity-first resolution strategy: matching policies are collected
+before selection, then the greatest configured severity is selected and `priority` breaks
+ties. A severe-weather policy can therefore override a lower-severity activity policy
+when both match.
+
 ## Adding a Policy
 
 Add another entry to `sops/sops.yaml` using the existing fields:
@@ -92,13 +97,23 @@ The frontend uses `VITE_API_BASE_URL` and keeps one UUID in `sessionStorage`. It
 
 ## Evaluation
 
-The evaluator covers deterministic SOP matching, paraphrased and adversarial requests, overlapping policies, failure paths, bounded Gemini retries, response grounding, session memory, temporary SOP extensibility, and repository security checks.
+The evaluator covers deterministic SOP matching, canonical paraphrase normalization,
+false-positive protection, adversarial requests, overlapping policies, a deterministic
+HIGH-severity thunderstorm path, failure paths, bounded Gemini retries, response
+grounding, three-turn session memory, temporary SOP extensibility, and repository
+security checks.
 
 ```bash
 .venv/bin/python evals/run_evals.py
 ```
 
 It also probes candidate locations against live Open-Meteo data for a current HIGH-severity condition. That case is skipped when no candidate meets the policy or the service is unavailable; it does not fabricate weather.
+
+The live severe-weather probe is informational: `PASS` means a real candidate currently
+matched a HIGH policy, `SKIP` means no candidate matched or the service was unavailable,
+and neither result is converted into the other. The deterministic mocked thunderstorm
+case separately proves that the HIGH-severity branch works without depending on current
+weather.
 
 ### Mocked versus live checks
 

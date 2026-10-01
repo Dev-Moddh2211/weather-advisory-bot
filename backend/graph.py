@@ -36,7 +36,26 @@ def analyze_question(state: AdvisoryState) -> dict[str, Any]:
         return {"error_type": "configuration", "error": "GEMINI_API_KEY is not configured."}
     model = ChatGoogleGenerativeAI(model=model_name, temperature=0, thinking_level="low").with_structured_output(Intent)
     previous = state.get("messages", [])[:-1]
-    prompt = f"Extract context only, never safety advice. Previous turns: {previous}\nLatest message: {message}"
+    supported_activities = sorted({
+        activity
+        for sop in load_sops()["sops"]
+        for activity in sop.get("conditions", {}).get("activity_any", [])
+    })
+    prompt = f"""
+Extract request context only; never provide safety advice and never evaluate a policy.
+
+Return activity as one canonical activity from this repository-supported vocabulary when
+the user's meaning clearly matches one of them: {supported_activities}.
+Normalize paraphrases to the underlying activity rather than copying surface wording.
+For example, an outdoor meal or spending time outside with food and friends can mean
+the canonical activity 'picnic' when that is clearly the request. Do not classify every
+outdoor activity as a picnic: cycling, running, walking, fishing, and an unspecified
+request to go outside remain distinct or null. If the activity is genuinely ambiguous,
+return null. Do not invent activities, SOP IDs, rules, weather values, or recommendations.
+
+Previous turns: {previous}
+Latest message: {message}
+"""
     try:
         intent = invoke_gemini(lambda: model.invoke(prompt))
     except GeminiUnavailableError as exc:
