@@ -76,11 +76,35 @@ function Composer({ value, onChange, onSubmit, loading }) {
   return <form className="composer" onSubmit={onSubmit}><textarea ref={ref} value={value} onChange={event => onChange(event.target.value)} onKeyDown={handleKeyDown} placeholder="Type your weather or activity question..." disabled={loading} rows="1" aria-label="Weather question" /><button className="send" aria-label="Send question" disabled={loading || !value.trim()}><span aria-hidden="true">↑</span></button><div className="composer-hint">Enter to send · Shift + Enter for a new line</div></form>;
 }
 
+function DeveloperPanel({ onClose }) {
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return <div className="developer-overlay" role="presentation" onMouseDown={onClose}>
+    <aside className="developer-panel" role="dialog" aria-modal="true" aria-labelledby="developer-panel-title" onMouseDown={event => event.stopPropagation()}>
+      <div className="developer-panel-header"><h2 id="developer-panel-title">About Developer</h2><button type="button" className="panel-close" onClick={onClose} aria-label="Close developer information">×</button></div>
+      <div className="developer-panel-content">
+        <h3>Dev AshishKumar Moddh</h3>
+        <p className="developer-education">B.Tech Information Technology<br /><span>Indian Institute of Information Technology, Sonepat</span></p>
+        <a className="developer-link" href="https://www.linkedin.com/in/dev-ashishkumar-moddh-28a505215" target="_blank" rel="noopener noreferrer">LinkedIn <span aria-hidden="true">↗</span></a>
+        <div className="developer-summary"><div className="section-label">Professional Summary</div><p>B.Tech Information Technology student focused on AI Software Engineering, with hands-on experience building LLM, RAG, and backend systems using Python, FastAPI, PostgreSQL, and Docker. Built real-data retrieval and real-time LLM streaming systems, with practical experience in LLM evaluation, prompt engineering, debugging, and reliability testing.</p></div>
+        <a className="developer-link" href="https://drive.google.com/file/d/1viI0ZenWQg289qeBhk-0CD050AK733G6/view?usp=sharing" target="_blank" rel="noopener noreferrer">Resume <span aria-hidden="true">↗</span></a>
+      </div>
+    </aside>
+  </div>;
+}
+
 export default function App() {
   const sessionId = useMemo(getSessionId, []);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isDeveloperPanelOpen, setDeveloperPanelOpen] = useState(false);
   const conversationRef = useRef(null);
 
   useEffect(() => { const node = conversationRef.current; if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' }); }, [messages, loading]);
@@ -98,10 +122,11 @@ export default function App() {
     } finally { setLoading(false); }
   }
 
-  return <main className="app-shell"><header className="topbar"><div className="brand-title">Weather Advisory</div></header>
+  return <main className="app-shell"><header className="topbar"><div className="brand-row"><div className="brand-title">Weather Advisory</div><nav className="top-nav" aria-label="Website navigation"><a href="https://github.com/Dev-Moddh2211/weather-advisory-bot" target="_blank" rel="noopener noreferrer">GitHub</a><button type="button" onClick={() => setDeveloperPanelOpen(true)}>About Developer</button></nav></div></header>
     <section className="conversation" ref={conversationRef} aria-live="polite">
       {messages.length === 0 ? <EmptyState onSuggestion={prompt => submit(null, prompt)} /> : <div className="reading-column">{messages.map((message, index) => <Message message={message} key={`${message.role}-${index}`} />)}{loading && <div className="message assistant loading-message"><div className="assistant-label">Advisory</div><p><span className="thinking-dots"><i /> <i /> <i /></span><span className="sr-only">Checking live weather</span></p></div>}</div>}
     </section>
     <Composer value={input} onChange={setInput} onSubmit={submit} loading={loading} />
+    {isDeveloperPanelOpen && <DeveloperPanel onClose={() => setDeveloperPanelOpen(false)} />}
   </main>;
 }

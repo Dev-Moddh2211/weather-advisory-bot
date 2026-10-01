@@ -251,6 +251,50 @@ async def t23():
     assert result.precipitation_probability_pct == 20 and result.uv_index == 5
 
 
+def t24():
+    _, _, selected = evaluate_sop("running", case_weather(temperature_c=28, wind_speed_kmh=8, precipitation_probability_pct=0))
+    assert selected["id"] == "SOP-013"
+    for temperature, expected in ((29.9, "SOP-013"), (30, "SOP-003"), (34.9, "SOP-003"), (35, "SOP-002")):
+        _, _, selected = evaluate_sop("running", case_weather(temperature_c=temperature, wind_speed_kmh=8, precipitation_probability_pct=0))
+        assert selected["id"] == expected
+
+
+def t25():
+    _, matches, selected = evaluate_sop("picnic", case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=0, uv_index=8))
+    assert {item["id"] for item in matches} == {"SOP-010", "SOP-014"}
+    assert selected["id"] == "SOP-014" and selected["severity"] == "MODERATE"
+    for uv, expected in ((7.9, "SOP-010"), (8, "SOP-014"), (9, "SOP-014")):
+        _, _, selected = evaluate_sop("picnic", case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=0, uv_index=uv))
+        assert selected["id"] == expected
+
+
+def t26():
+    _, _, selected = evaluate_sop("walking", case_weather(temperature_c=4.9, wind_speed_kmh=8, precipitation_probability_pct=0))
+    assert selected["id"] == "SOP-015"
+    _, _, selected = evaluate_sop("walking", case_weather(temperature_c=5, wind_speed_kmh=8, precipitation_probability_pct=0))
+    assert selected is None
+
+
+def t27():
+    for wind, expected in ((24.9, "SOP-013"), (25, "SOP-016"), (35, "SOP-016"), (35.1, "SOP-001")):
+        _, _, selected = evaluate_sop("cycling", case_weather(temperature_c=20, wind_speed_kmh=wind, precipitation_probability_pct=0))
+        assert (selected["id"] if selected else None) == expected
+    _, _, selected = evaluate_sop("cycling", case_weather(temperature_c=20, wind_speed_kmh=36, precipitation_probability_pct=0))
+    assert selected["id"] == "SOP-001"
+
+
+def t28():
+    for activity in ("fishing", "unknown", None):
+        _, matches, selected = evaluate_sop(activity, case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=0, uv_index=3))
+        assert matches == [] and selected is None
+
+
+def t29():
+    _, matches, selected = evaluate_sop("cycling", case_weather(temperature_c=36, wind_speed_kmh=40, precipitation_probability_pct=0))
+    assert {item["id"] for item in matches} == {"SOP-001", "SOP-002"}
+    assert selected["id"] == "SOP-001"
+
+
 def live_severe():
     candidates = [("Reykjavik", 64.15, -21.94), ("Wellington", -41.29, 174.78), ("Sapporo", 43.06, 141.35), ("Bhopal", 23.26, 77.41)]
     async def run():
@@ -266,7 +310,7 @@ def live_severe():
     return asyncio.run(run())
 
 
-TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16), ("T17", t17), ("T18", t18), ("T19", t19), ("T20", t20), ("T21", t21), ("T22", t22), ("T23", t23)]
+TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16), ("T17", t17), ("T18", t18), ("T19", t19), ("T20", t20), ("T21", t21), ("T22", t22), ("T23", t23), ("T24", t24), ("T25", t25), ("T26", t26), ("T27", t27), ("T28", t28), ("T29", t29)]
 
 def main():
     print("Weather Advisory Bot — Evaluation Results")

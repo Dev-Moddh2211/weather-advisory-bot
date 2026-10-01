@@ -198,3 +198,71 @@ sops:
     severity: LOW
     advice: The activity may be reasonable with rain protection; have a sheltered alternative available.
     priority: 30
+
+  - id: SOP-013
+    name: Comfortable outdoor exercise conditions
+    category: Outdoor Exercise
+    description: Ordinary outdoor exercise is more suitable in mild temperatures with limited rain and moderate wind.
+    policy_note: This low-severity policy fills the comfortable exercise range below the existing heat-adjustment policies.
+    conditions:
+      activity_any: [running, jogging, cycling, hiking, workout, outdoor_workout]
+      all:
+        - field: temperature_c
+          operator: between
+          min: 15
+          max: 29.9
+        - field: precipitation_probability_pct
+          operator: "<"
+          value: 30
+        - field: wind_speed_kmh
+          operator: "<"
+          value: 25
+    severity: LOW
+    advice: Outdoor exercise is within the defined comfortable range under these conditions.
+    priority: 20
+
+  - id: SOP-014
+    name: High UV outdoor exposure
+    category: General Outdoor Activities
+    description: High ultraviolet exposure calls for limiting unprotected time outdoors.
+    policy_note: This policy intentionally uses the reported UV index as a deterministic trigger and can overlap with activity-specific policies.
+    conditions:
+      activity_any: [picnic, running, jogging, cycling, hiking, walking, sightseeing, gardening, outdoor_event]
+      all:
+        - field: uv_index
+          operator: ">="
+          value: 8
+    severity: MODERATE
+    advice: Limit unprotected outdoor exposure while the UV index is high and use the protective action appropriate to the activity.
+    priority: 65
+
+  - id: SOP-015
+    name: Cold conditions for outdoor activity
+    category: General Outdoor Activities
+    description: Cold conditions can make extended general outdoor activity less suitable.
+    policy_note: This general outdoor policy is separate from the stronger child-specific cold policy.
+    conditions:
+      activity_any: [running, jogging, cycling, hiking, walking, sightseeing, gardening, outdoor_event]
+      all:
+        - field: temperature_c
+          operator: "<"
+          value: 5
+    severity: MODERATE
+    advice: Keep outdoor activity shorter in these cold conditions and use suitable warm clothing.
+    priority: 65
+
+  - id: SOP-016
+    name: Moderate wind for general outdoor activities
+    category: General Outdoor Activities
+    description: Moderate wind can make some outdoor activities less comfortable before strong-wind thresholds are reached.
+    policy_note: This policy covers the moderate range and leaves the existing high-severity cycling wind threshold in control above it.
+    conditions:
+      activity_any: [cycling, running, jogging, hiking, walking, sightseeing, gardening, outdoor_event, picnic]
+      all:
+        - field: wind_speed_kmh
+          operator: between
+          min: 25
+          max: 35
+    severity: MODERATE
+    advice: Expect less comfortable outdoor conditions in this wind and consider a sheltered option.
+    priority: 55
