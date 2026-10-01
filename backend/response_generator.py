@@ -28,14 +28,34 @@ def _clean_text(value: str) -> str:
     return value.strip()
 
 
+def _is_recommendation_only(value: str) -> bool:
+    """Reject a model response that violates the structured response contract."""
+    forbidden = (
+        r"current conditions?",
+        r"current weather",
+        r"policy applied",
+        r"policy used",
+        r"severity\s*:",
+        r"sop(?:\s+id)?\s*:",
+        r"recommendation\s*:",
+        r"temperature\s*:",
+        r"wind\s*:",
+        r"precipitation",
+        r"uv\s*:",
+        r"condition\s*:",
+    )
+    return bool(value) and not any(re.search(pattern, value, re.IGNORECASE) for pattern in forbidden)
+
+
 def generate_response(state: dict) -> str:
     sop = state.get("selected_sop")
     weather = state.get("weather", {})
     if not sop:
         return "I don't have a specific weather-safety policy that covers this activity under the current conditions."
-    facts = f"Recommendation: {sop['advice']}\nWeather facts: temperature {weather['temperature_c']} C, wind {weather['wind_speed_kmh']} km/h, precipitation {weather['precipitation_mm']} mm, precipitation probability {weather['precipitation_probability_pct']}%, UV {weather['uv_index']}, condition {weather['weather_condition']}"
+    facts = f"Approved recommendation: {sop['advice']}\nVerified facts for context only: temperature {weather['temperature_c']} C, wind {weather['wind_speed_kmh']} km/h, precipitation {weather['precipitation_mm']} mm, precipitation probability {weather['precipitation_probability_pct']}%, UV {weather['uv_index']}, condition {weather['weather_condition']}"
     if not os.getenv("GEMINI_API_KEY"):
         return sop["advice"]
     model = ChatGoogleGenerativeAI(model=gemini_model_name(), temperature=0, thinking_level="low")
     result = invoke_gemini(lambda: model.invoke([SystemMessage(content="Write one or two plain-text sentences explaining only the supplied recommendation. Do not include headings, policy IDs, severity labels, weather tables, markdown, or new advice."), HumanMessage(content=facts)]))
-    return _extract_generated_text(result.content)
+    generated = _extract_generated_text(result.content)
+    return generated if _is_recommendation_only(generated) else sop["advice"]
