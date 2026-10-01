@@ -155,8 +155,8 @@ sops:
       all:
         - field: temperature_c
           operator: between
-          min: 15
-          max: 30
+          min: 18
+          max: 32
         - field: precipitation_probability_pct
           operator: "<"
           value: 30

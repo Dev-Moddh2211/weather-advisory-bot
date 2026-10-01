@@ -2,7 +2,11 @@ from __future__ import annotations
 from typing import Any
 
 
-ALIASES = {"bicycling": "cycling", "bike_ride": "cycling", "jogging": "running", "senior": "older_adult", "infant": "child"}
+ALIASES = {
+    "bicycling": "cycling", "bike_ride": "cycling", "biking": "cycling",
+    "jogging": "running", "outdoor_exercise": "running", "exercise_outdoors": "running",
+    "senior": "older_adult", "infant": "child",
+}
 
 
 def _value(context: dict[str, Any], weather: dict[str, Any], field: str) -> Any:

@@ -7,6 +7,7 @@ import re
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import httpx
 import yaml
@@ -138,6 +139,42 @@ def t12():
     assert not os.getenv("GEMINI_API_KEY", "").strip() or True
 
 
+def t13():
+    _, matches, selected = evaluate_sop("picnic", case_weather(temperature_c=31.7, wind_speed_kmh=8.8, precipitation_probability_pct=25))
+    assert "SOP-010" in [item["id"] for item in matches]
+    assert selected["id"] == "SOP-010" and selected["severity"] == "LOW"
+
+
+def t14():
+    _, _, selected = evaluate_sop("outdoor_exercise", case_weather(temperature_c=32, wind_speed_kmh=5))
+    assert selected["id"] == "SOP-003"
+
+
+async def t15():
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"timezone": "Asia/Kolkata", "hourly": {
+                "time": ["2026-10-02T09:00", "2026-10-02T18:00", "2026-10-03T13:00"],
+                "temperature_2m": [25, 29, 28], "wind_speed_10m": [4, 6, 5],
+                "precipitation": [0, 1, 0], "precipitation_probability": [10, 20, 15],
+                "uv_index": [3, 0, 5], "weather_code": [0, 61, 0]}}
+    class Client:
+        async def get(self, *args, **kwargs): return Response()
+    with patch("backend.weather.datetime") as clock:
+        clock.now.return_value = __import__("datetime").datetime(2026, 10, 2, 10)
+        result = await weather.fetch_weather(19, 72, "this evening", client=Client())
+    assert result.timestamp.endswith("18:00") and result.temperature_c == 29
+
+
+def t16():
+    from backend.response_generator import generate_response
+    state = {"selected_sop": {"id": "SOP-010", "name": "Suitable conditions", "severity": "LOW", "advice": "This looks like a reasonable day for a picnic."}, "weather": case_weather()}
+    with patch.dict(os.environ, {"GEMINI_API_KEY": ""}):
+        answer = generate_response(state)
+    assert answer == state["selected_sop"]["advice"] and "Policy" not in answer and "Current conditions" not in answer
+
+
 def live_severe():
     candidates = [("Reykjavik", 64.15, -21.94), ("Wellington", -41.29, 174.78), ("Sapporo", 43.06, 141.35), ("Bhopal", 23.26, 77.41)]
     async def run():
@@ -153,7 +190,7 @@ def live_severe():
     return asyncio.run(run())
 
 
-TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12)]
+TESTS = [("T01", t01), ("T02", t02), ("T03", t03), ("T04", t04), ("T05", t05), ("T06", t06), ("T07", t07), ("T08", t08), ("T09", t09), ("T10", t10), ("T11", t11), ("T12", t12), ("T13", t13), ("T14", t14), ("T15", t15), ("T16", t16)]
 
 def main():
     print("Weather Advisory Bot — Evaluation Results")

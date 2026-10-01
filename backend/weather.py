@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import httpx
 from pydantic import BaseModel
 
@@ -31,7 +32,8 @@ def weather_condition(code: int) -> str:
 
 
 async def fetch_weather(latitude: float, longitude: float, requested_time: str = "now", client: httpx.AsyncClient | None = None) -> WeatherData:
-    future = requested_time not in {"", "now", "current", "today"}
+    requested = (requested_time or "now").strip().lower()
+    future = requested not in {"", "now", "current", "today"}
     params = {"latitude": latitude, "longitude": longitude, "timezone": "auto", "forecast_days": 2}
     if future:
         params["hourly"] = "temperature_2m,wind_speed_10m,precipitation,rain,precipitation_probability,uv_index,weather_code"
@@ -46,16 +48,19 @@ async def fetch_weather(latitude: float, longitude: float, requested_time: str =
         payload = response.json()
         if future:
             hourly = payload["hourly"]
-            target_hour = 18 if "evening" in requested_time.lower() or "night" in requested_time.lower() else 9 if "morning" in requested_time.lower() else 13 if "afternoon" in requested_time.lower() else None
-            if "tomorrow" in requested_time.lower():
-                target_date = (datetime.now() + timedelta(days=1)).date().isoformat()
-                candidates = [i for i, value in enumerate(hourly["time"]) if value.startswith(target_date)]
-            else:
-                candidates = list(range(len(hourly["time"])))
+            target_hour = 18 if any(word in requested for word in ("evening", "later", "night")) else 9 if "morning" in requested else 13 if "afternoon" in requested or "tomorrow" in requested else 13
+            timezone_name = payload.get("timezone", "UTC")
+            try:
+                local_now = datetime.now(ZoneInfo(timezone_name))
+            except (KeyError, ValueError):
+                local_now = datetime.now(ZoneInfo("UTC"))
+            target_date = (local_now + timedelta(days=1)).date() if "tomorrow" in requested else local_now.date()
+            candidates = [i for i, value in enumerate(hourly["time"]) if value[:10] == target_date.isoformat()]
+            if not candidates:
+                raise WeatherError("The requested forecast time is unavailable.")
             if target_hour is not None:
                 index = min(candidates, key=lambda i: abs(int(hourly["time"][i][11:13]) - target_hour))
-            else:
-                index = candidates[0]
+            else: index = candidates[0]
             values = {key: hourly[key][index] for key in ("time", "temperature_2m", "wind_speed_10m", "precipitation", "precipitation_probability", "uv_index", "weather_code")}
         else:
             current = payload["current"]

@@ -25,12 +25,12 @@ button, textarea { font: inherit; }
 .message.error { color: #8b4545; }
 .section-label { margin-bottom: 9px; color: #7c858b; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .weather-meta, .policy-meta { margin-top: 20px; border: 1px solid #e4e7e5; border-radius: 13px; padding: 13px 15px; background: rgba(255,255,255,.55); }
-.weather-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.weather-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
 .weather-value span { display: block; color: #8a9297; font-size: 11px; line-height: 1.35; }
 .weather-value strong { display: block; margin-top: 2px; color: #3d464a; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .policy-meta { max-width: 520px; }
 .policy-row { display: flex; align-items: center; gap: 12px; color: #465257; font-size: 14px; }
-.policy-row strong { font-weight: 600; }
+.policy-row strong { display: block; font-weight: 600; } .policy-row small { display: block; color: #7d878b; font-size: 12px; }
 .severity { border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: .06em; }
 .severity.low { color: #477158; background: #e7f1e9; } .severity.moderate { color: #88652d; background: #f5eedc; } .severity.high { color: #985050; background: #f6e5e3; }
 .no-guidance { margin-top: 18px; color: #806b3a; font-size: 13px; }

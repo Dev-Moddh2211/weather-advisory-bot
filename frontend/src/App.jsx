@@ -15,7 +15,16 @@ function getSessionId() {
   return id;
 }
 
-function WeatherSummary({ weather }) {
+function weatherLabel(requestedTime) {
+  const value = (requestedTime || '').toLowerCase();
+  if (value.includes('afternoon')) return 'Weather for this afternoon';
+  if (value.includes('evening') || value.includes('later') || value.includes('night')) return 'Weather for this evening';
+  if (value.includes('tomorrow')) return 'Weather for tomorrow';
+  if (value.includes('now') || value.includes('current')) return 'Current weather';
+  return 'Weather used for this advisory';
+}
+
+function WeatherSummary({ weather, requestedTime }) {
   if (!weather) return null;
   const values = [
     ['Temperature', `${weather.temperature_c}°C`],
@@ -23,20 +32,21 @@ function WeatherSummary({ weather }) {
     ['Rain', `${weather.precipitation_mm} mm`],
     ['Rain chance', `${weather.precipitation_probability_pct}%`],
     ['UV', weather.uv_index],
-    ['Condition', weather.weather_condition],
+    ['Condition', weather.weather_condition ? weather.weather_condition[0].toUpperCase() + weather.weather_condition.slice(1) : '—'],
+    ['Timestamp', weather.timestamp],
   ];
-  return <section className="weather-meta" aria-label="Current weather">
-    <div className="section-label">Current weather</div>
+  return <section className="weather-meta" aria-label={weatherLabel(requestedTime)}>
+    <div className="section-label">{weatherLabel(requestedTime)}</div>
     <div className="weather-grid">{values.map(([label, value]) => <div className="weather-value" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
   </section>;
 }
 
 function PolicySummary({ data }) {
   if (data.error_type) return null;
-  if (data.sop_id == null && !data.matched_sops?.length) return <div className="no-guidance">No applicable policy matched these conditions.</div>;
+  if (data.sop_id == null && !data.matched_sops?.length) return <section className="policy-meta no-policy" aria-label="No matching policy"><div className="section-label">No matching policy</div></section>;
   return <section className="policy-meta" aria-label="Policy used">
     <div className="section-label">Policy used</div>
-    <div className="policy-row"><strong>{data.sop_id || 'No selected SOP'}</strong>{data.severity && <span className={`severity ${data.severity.toLowerCase()}`}>{data.severity}</span>}</div>
+    <div className="policy-row"><div><strong>{data.sop_id || 'No selected SOP'}</strong>{data.selected_sop?.name && <small>{data.selected_sop.name}</small>}</div>{data.severity && <span className={`severity ${data.severity.toLowerCase()}`}>{data.severity}</span>}</div>
   </section>;
 }
 
@@ -44,7 +54,7 @@ function Message({ message }) {
   if (message.role === 'user') return <div className="message user"><p>{message.content}</p></div>;
   return <article className={`message assistant ${message.error ? 'error' : ''}`}>
     <div className="assistant-label">Advisory</div><p>{message.content}</p>
-    {message.data && <><WeatherSummary weather={message.data.weather} /><PolicySummary data={message.data} /></>}
+    {message.data && <><WeatherSummary weather={message.data.weather} requestedTime={message.data.requested_time} /><PolicySummary data={message.data} /></>}
   </article>;
 }
 
