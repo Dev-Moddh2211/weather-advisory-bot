@@ -52,10 +52,11 @@ def generate_response(state: dict) -> str:
     weather = state.get("weather", {})
     if not sop:
         return "I don't have a specific weather-safety policy that covers this activity under the current conditions."
+    citation = sop.get("cite_as") or f"{sop['id']} - {sop['name']}"
     facts = f"Approved recommendation: {sop['advice']}\nVerified facts for context only: temperature {weather['temperature_c']} C, wind {weather['wind_speed_kmh']} km/h, precipitation {weather['precipitation_mm']} mm, precipitation probability {weather['precipitation_probability_pct']}%, UV {weather['uv_index']}, condition {weather['weather_condition']}"
     if not os.getenv("GEMINI_API_KEY"):
-        return sop["advice"]
+        return f"{citation}\n{sop['advice']}"
     model = ChatGoogleGenerativeAI(model=gemini_model_name(), temperature=0, thinking_level="low")
     result = invoke_gemini(lambda: model.invoke([SystemMessage(content="Write one or two plain-text sentences explaining only the supplied recommendation. Do not include headings, policy IDs, severity labels, weather tables, markdown, or new advice."), HumanMessage(content=facts)]))
     generated = _extract_generated_text(result.content)
-    return generated if _is_recommendation_only(generated) else sop["advice"]
+    return f"{citation}\n{generated if _is_recommendation_only(generated) else sop['advice']}"

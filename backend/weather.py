@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class WeatherData(BaseModel):
@@ -14,6 +14,7 @@ class WeatherData(BaseModel):
     precipitation_probability_pct: float
     uv_index: float
     weather_condition: str
+    raw_payload: dict = Field(default_factory=dict, exclude=True)
 
 
 class WeatherError(RuntimeError):
@@ -87,7 +88,7 @@ async def fetch_weather(latitude: float, longitude: float, requested_time: str =
             hourly_times = hourly.get("time", [])
             hourly_index = _nearest_hourly_index(hourly_times, current["time"]) if hourly_times else 0
             values = {"time": current["time"], "temperature_2m": current["temperature_2m"], "wind_speed_10m": current["wind_speed_10m"], "precipitation": current["precipitation"], "precipitation_probability": hourly.get("precipitation_probability", [0])[hourly_index], "uv_index": hourly.get("uv_index", [0])[hourly_index], "weather_code": current["weather_code"]}
-        return WeatherData(timestamp=values["time"], temperature_c=values["temperature_2m"], wind_speed_kmh=values["wind_speed_10m"], precipitation_mm=values["precipitation"], precipitation_probability_pct=values["precipitation_probability"], uv_index=values["uv_index"], weather_condition=weather_condition(values["weather_code"]))
+        return WeatherData(timestamp=values["time"], temperature_c=values["temperature_2m"], wind_speed_kmh=values["wind_speed_10m"], precipitation_mm=values["precipitation"], precipitation_probability_pct=values["precipitation_probability"], uv_index=values["uv_index"], weather_condition=weather_condition(values["weather_code"]), raw_payload=payload)
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
         raise WeatherError("Live weather could not be retrieved.") from exc
     finally:

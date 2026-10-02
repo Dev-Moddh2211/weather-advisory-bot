@@ -25,8 +25,12 @@ class AdvisoryState(TypedDict, total=False):
     requested_time: str
     is_follow_up: bool
     weather: Weather
+    raw_weather: dict[str, Any]
     matched_sops: list[dict[str, Any]]
     selected_sop: dict[str, Any]
+    situational: bool
+    situational_sop_id: str
+    override: bool
     severity: str
     answer: str
     error_type: str

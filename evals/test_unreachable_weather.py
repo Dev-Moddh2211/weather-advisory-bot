@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from unittest.mock import patch
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -13,6 +14,7 @@ from backend import graph
 from backend.weather import WeatherError
 
 
+@pytest.mark.asyncio
 async def test_unreachable_weather_is_error_not_no_match() -> None:
     async def unreachable(*args, **kwargs):
         raise WeatherError("Live weather could not be retrieved.")

@@ -132,9 +132,9 @@ def t11():
     config = sop_loader.load_sops()
     with TemporaryDirectory() as directory:
         path = Path(directory) / "sops.yaml"
-        data = dict(config); data["sops"] = list(config["sops"]) + [{"id": "SOP-013", "name": "Test heat policy", "conditions": {"all": [{"field": "temperature_c", "operator": ">", "value": 50}]}, "severity": "HIGH", "advice": "Test advice", "priority": 1}]
+        data = dict(config); data["sops"] = list(config["sops"]) + [{"id": "SOP-TEST-NEW", "name": "Test heat policy", "conditions": {"all": [{"field": "temperature_c", "operator": ">", "value": 50}]}, "severity": "HIGH", "advice": "Test advice", "priority": 1}]
         path.write_text(yaml.safe_dump(data))
-        assert any(x["id"] == "SOP-013" for x in sop_loader.load_sops(path)["sops"])
+        assert any(x["id"] == "SOP-TEST-NEW" for x in sop_loader.load_sops(path)["sops"])
 
 
 def t12():
@@ -178,7 +178,7 @@ def t16():
     state = {"selected_sop": {"id": "SOP-010", "name": "Suitable conditions", "severity": "LOW", "advice": "This looks like a reasonable day for a picnic."}, "weather": case_weather()}
     with patch.dict(os.environ, {"GEMINI_API_KEY": ""}):
         answer = generate_response(state)
-    assert answer == state["selected_sop"]["advice"] and "Policy" not in answer and "Current conditions" not in answer
+    assert answer.startswith("SOP-010 - Suitable conditions") and state["selected_sop"]["advice"] in answer
 
 
 def t17():
@@ -332,17 +332,19 @@ def t29():
 
 
 def live_severe():
-    candidates = [("Reykjavik", 64.15, -21.94), ("Wellington", -41.29, 174.78), ("Sapporo", 43.06, 141.35), ("Bhopal", 23.26, 77.41)]
+    location = os.getenv("LIVE_SEVERE_LOCATION", "").strip()
+    if not location:
+        return None
     async def run():
         async with httpx.AsyncClient(timeout=10) as client:
-            for name, lat, lon in candidates:
-                try: data = (await client.get("https://api.open-meteo.com/v1/forecast", params={"latitude": lat, "longitude": lon, "current": "temperature_2m,wind_speed_10m,precipitation,weather_code", "timezone": "auto"})).json()["current"]
-                except Exception: continue
-                condition = weather.weather_condition(data["weather_code"])
-                values = case_weather(temperature_c=data["temperature_2m"], wind_speed_kmh=data["wind_speed_10m"], precipitation_mm=data["precipitation"], weather_condition=condition)
-                _, matches, selected = evaluate_sop("cycling", values)
-                if selected and selected["severity"] == "HIGH": return f"{name}: {selected['id']} with live wind {values['wind_speed_kmh']} km/h"
-        return None
+            location_result = await graph.geocode_location(location, client=client)
+            fetched = await weather.fetch_weather(location_result.latitude, location_result.longitude, "now", client=client)
+            values = fetched.model_dump(exclude={"raw_payload"})
+            _, matches, selected = evaluate_sop("cycling", values)
+            if selected and selected["severity"] == "HIGH":
+                answer = graph.generate_response({"selected_sop": selected, "weather": values})
+                return f"{location_result.name}: {selected['id']} payload={fetched.raw_payload} answer={answer}"
+            return None
     return asyncio.run(run())
 
 
@@ -360,7 +362,7 @@ def main():
     try:
         severe = live_severe()
         if severe: print(f"PASS LIVE severe-weather: {severe}"); passed += 1
-        else: print("SKIP LIVE severe-weather: no candidate currently met a HIGH policy or service unavailable"); skipped += 1
+        else: print("SKIP LIVE severe-weather: set LIVE_SEVERE_LOCATION and ensure it currently triggers a HIGH policy"); skipped += 1
     except Exception as exc:
         print(f"SKIP LIVE severe-weather: {exc}"); skipped += 1
     print(f"\nSummary:\nPassed: {passed}\nFailed: {failed}\nSkipped: {skipped}")

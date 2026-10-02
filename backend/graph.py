@@ -91,7 +91,7 @@ async def resolve_location(state: AdvisoryState) -> dict[str, Any]:
 async def fetch_weather_node(state: AdvisoryState) -> dict[str, Any]:
     try:
         weather = await fetch_weather(state["latitude"], state["longitude"], state.get("requested_time", "now"))
-        return {"weather": weather.model_dump()}
+        return {"weather": weather.model_dump(exclude={"raw_payload"}), "raw_weather": weather.raw_payload}
     except WeatherError as exc:
         return {"error_type": "weather", "error": str(exc)}
 
@@ -100,8 +100,16 @@ def route_error(state: AdvisoryState) -> str: return "error" if state.get("error
 def match_node(state: AdvisoryState) -> dict[str, Any]:
     config = load_sops()
     matches = match_sops(state, state["weather"], config)
-    return {"matched_sops": matches, "selected_sop": select_sop(matches, config["severity_order"])}
+    situational_matches = [sop for sop in matches if sop.get("category", "").lower() == "situational" or "outdoor_activity" in sop.get("conditions", {}).get("activity_any", [])]
+    selected = select_sop(situational_matches or matches, config["severity_order"])
+    return {"matched_sops": matches, "selected_sop": selected, "situational": bool(situational_matches), "situational_sop_id": selected["id"] if situational_matches and selected else None}
 def route_sop(state: AdvisoryState) -> str: return "found" if state.get("selected_sop") else "none"
+def route_match(state: AdvisoryState) -> str:
+    if state.get("error"): return "error"
+    if state.get("situational"): return "override"
+    return "found" if state.get("selected_sop") else "none"
+def override_node(state: AdvisoryState) -> dict[str, Any]:
+    return {"override": True}
 def response_node(state: AdvisoryState) -> dict[str, str]:
     try:
         return {"answer": generate_response(state)}
@@ -115,14 +123,15 @@ def no_guidance_node(state: AdvisoryState) -> dict[str, str]: return {"answer": 
 
 def build_graph():
     graph = StateGraph(AdvisoryState)
-    for name, fn in (("analyze_question", analyze_question), ("resolve_location", resolve_location), ("fetch_weather", fetch_weather_node), ("error", error_node), ("match_sops", match_node), ("no_guidance", no_guidance_node), ("generate_response", response_node)):
+    for name, fn in (("analyze_question", analyze_question), ("resolve_location", resolve_location), ("fetch_weather", fetch_weather_node), ("error", error_node), ("match_sops", match_node), ("override", override_node), ("no_guidance", no_guidance_node), ("generate_response", response_node)):
         graph.add_node(name, fn)
     graph.add_edge(START, "analyze_question")
     graph.add_conditional_edges("analyze_question", route_error, {"error": "error", "ok": "resolve_location"})
     graph.add_conditional_edges("resolve_location", route_error, {"error": "error", "ok": "fetch_weather"})
     graph.add_conditional_edges("fetch_weather", route_error, {"error": "error", "ok": "match_sops"})
-    graph.add_conditional_edges("match_sops", route_sop, {"found": "generate_response", "none": "no_guidance"})
+    graph.add_conditional_edges("match_sops", route_match, {"error": "error", "override": "override", "found": "generate_response", "none": "no_guidance"})
     graph.add_edge("no_guidance", END)
     graph.add_edge("generate_response", END)
+    graph.add_edge("override", "generate_response")
     graph.add_edge("error", END)
     return graph.compile(checkpointer=InMemorySaver())

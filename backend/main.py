@@ -27,6 +27,11 @@ app.add_middleware(
 workflow = build_graph()
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 class ChatRequest(BaseModel):
     session_id: str
     message: str
