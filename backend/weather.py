@@ -4,17 +4,17 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat
 
 
 class WeatherData(BaseModel):
-    timestamp: str
-    temperature_c: float
-    wind_speed_kmh: float
-    precipitation_mm: float
-    precipitation_probability_pct: float
-    uv_index: float
-    weather_condition: str
+    timestamp: str = Field(min_length=1)
+    temperature_c: FiniteFloat = Field(ge=-100, le=70)
+    wind_speed_kmh: FiniteFloat = Field(ge=0, le=300)
+    precipitation_mm: FiniteFloat = Field(ge=0, le=2000)
+    precipitation_probability_pct: FiniteFloat = Field(ge=0, le=100)
+    uv_index: FiniteFloat = Field(ge=0, le=20)
+    weather_condition: str = Field(min_length=1)
     raw_payload: dict = Field(default_factory=dict, exclude=True)
 
 

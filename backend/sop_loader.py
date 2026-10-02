@@ -6,10 +6,21 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 
 SUPPORTED_OPERATORS = {"equals", "==", ">", ">=", "<", "<=", "in", "membership", "between"}
+SUPPORTED_CONDITION_FIELDS = {
+    "activity",
+    "intent",
+    "user_group",
+    "temperature_c",
+    "wind_speed_kmh",
+    "precipitation_mm",
+    "precipitation_probability_pct",
+    "uv_index",
+    "weather_condition",
+}
 
 
 class ConditionModel(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     field: str
     operator: Literal["equals", "==", ">", ">=", "<", "<=", "in", "membership", "between"]
     value: Any = None
@@ -18,6 +29,8 @@ class ConditionModel(BaseModel):
 
     @model_validator(mode="after")
     def validate_shape(self):
+        if self.field not in SUPPORTED_CONDITION_FIELDS:
+            raise ValueError(f"unsupported condition field: {self.field}")
         if self.operator == "between" and (self.min is None or self.max is None):
             raise ValueError("between requires min and max")
         if self.operator != "between" and self.value is None:
@@ -44,6 +57,12 @@ class FuzzySignalModel(BaseModel):
     membership: FuzzyMembershipModel
     weight: float = Field(gt=0)
 
+    @model_validator(mode="after")
+    def validate_field(self):
+        if self.field not in SUPPORTED_CONDITION_FIELDS:
+            raise ValueError(f"unsupported fuzzy condition field: {self.field}")
+        return self
+
 
 class FuzzyConditionModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -66,9 +85,25 @@ class ConditionsModel(BaseModel):
     any: list[ConditionModel] | None = None
     fuzzy: FuzzyConditionModel | None = None
 
+    @model_validator(mode="after")
+    def require_condition(self):
+        if not any(
+            value is not None
+            for value in (
+                self.activity_any,
+                self.intent_any,
+                self.group_any,
+                self.all,
+                self.any,
+                self.fuzzy,
+            )
+        ):
+            raise ValueError("conditions must define at least one scope or rule")
+        return self
+
 
 class SOPModel(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     category: str = Field(default="Uncategorized", min_length=1)
@@ -77,6 +112,8 @@ class SOPModel(BaseModel):
     advice: str = Field(min_length=1)
     priority: int
     cite_as: str | None = None
+    description: str | None = None
+    policy_note: str | None = None
 
     @model_validator(mode="after")
     def default_citation(self):
@@ -86,6 +123,7 @@ class SOPModel(BaseModel):
 
 
 class SOPConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     schema_version: int
     severity_order: dict[str, int]
     sops: list[SOPModel]
@@ -96,10 +134,22 @@ class SOPConfigModel(BaseModel):
         duplicates = sorted({item for item in ids if ids.count(item) > 1})
         if duplicates:
             raise ValueError(f"duplicate SOP IDs: {', '.join(duplicates)}")
+        allowed_severities = {sop.severity for sop in self.sops}
+        if set(self.severity_order) != {"LOW", "MODERATE", "HIGH"}:
+            raise ValueError("severity_order must define LOW, MODERATE, and HIGH")
+        if any(value <= 0 for value in self.severity_order.values()):
+            raise ValueError("severity_order values must be positive")
+        if len(set(self.severity_order.values())) != len(self.severity_order):
+            raise ValueError("severity_order values must be unique")
+        if not allowed_severities.issubset(self.severity_order):
+            raise ValueError("every SOP severity must exist in severity_order")
         return self
 
 
-def load_sops(path: str | Path = "sops/sops.yaml") -> dict[str, Any]:
+DEFAULT_SOP_PATH = Path(__file__).resolve().parents[1] / "sops" / "sops.yaml"
+
+
+def load_sops(path: str | Path = DEFAULT_SOP_PATH) -> dict[str, Any]:
     with Path(path).open(encoding="utf-8") as file:
         data = yaml.safe_load(file)
     try:

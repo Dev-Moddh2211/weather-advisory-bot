@@ -175,17 +175,23 @@ sops:
     priority: 40
 
   - id: SOP-011
-    name: Outdoor activity during thunderstorms
+    name: Severe weather across outdoor activities
     category: General Outdoor Activities
-    description: Stop outdoor activities when thunderstorm conditions are present.
+    description: Stop outdoor activities during observable severe weather conditions.
     conditions:
       activity_any: [outdoor_activity]
-      all:
+      any:
         - field: weather_condition
           operator: equals
           value: thunderstorm
+        - field: precipitation_probability_pct
+          operator: ">="
+          value: 80
+        - field: precipitation_mm
+          operator: ">="
+          value: 10
     severity: HIGH
-    advice: Move the activity indoors or wait until the storm has passed.
+    advice: Treat these severe conditions as a broad outdoor-activity hazard. Move the activity indoors or wait until conditions improve.
     priority: 100
 
   - id: SOP-012

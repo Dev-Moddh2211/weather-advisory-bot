@@ -3,8 +3,9 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from .graph import build_graph
+from .sop_loader import load_sops
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,10 @@ cors_origins = [
     if origin.strip()
 ]
 logger.info("CORS origins: %s", cors_origins)
+
+# Fail application startup if the policy data is malformed.  Request-time
+# loads remain in place so a policy owner can update YAML without code changes.
+SOP_CONFIG = load_sops()
 
 
 app = FastAPI(title="Weather Advisory Bot")
@@ -33,8 +38,8 @@ async def health():
 
 
 class ChatRequest(BaseModel):
-    session_id: str
-    message: str
+    session_id: str = Field(min_length=1, max_length=200)
+    message: str = Field(min_length=1, max_length=4000)
 
 
 @app.post("/chat")

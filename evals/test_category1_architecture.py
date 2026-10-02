@@ -47,3 +47,30 @@ def test_situational_match_selects_broad_policy_and_cites_it():
     assert result["situational"] is True
     assert result["situational_sop_id"] == "SOP-011"
     assert "SOP-011" in graph.generate_response({**result, "weather": weather})
+
+
+def test_invalid_weather_values_are_rejected_before_matching():
+    from pydantic import ValidationError
+    from backend.weather import WeatherData
+
+    with pytest.raises(ValidationError):
+        WeatherData(
+            timestamp="fixture",
+            temperature_c=20,
+            wind_speed_kmh=-1,
+            precipitation_mm=0,
+            precipitation_probability_pct=10,
+            uv_index=3,
+            weather_condition="clear",
+        )
+
+    with pytest.raises(ValidationError):
+        WeatherData(
+            timestamp="fixture",
+            temperature_c=20,
+            wind_speed_kmh=5,
+            precipitation_mm=0,
+            precipitation_probability_pct=101,
+            uv_index=3,
+            weather_condition="clear",
+        )
