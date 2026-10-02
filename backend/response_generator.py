@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import os
 import re
-from langchain_google_genai import ChatGoogleGenerativeAI
+
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 from .gemini import gemini_model_name, invoke_gemini
 
 
@@ -57,6 +60,19 @@ def generate_response(state: dict) -> str:
     if not os.getenv("GEMINI_API_KEY"):
         return f"{citation}\n{sop['advice']}"
     model = ChatGoogleGenerativeAI(model=gemini_model_name(), temperature=0, thinking_level="low")
-    result = invoke_gemini(lambda: model.invoke([SystemMessage(content="Write one or two plain-text sentences explaining only the supplied recommendation. Do not include headings, policy IDs, severity labels, weather tables, markdown, or new advice."), HumanMessage(content=facts)]))
+    result = invoke_gemini(
+        lambda: model.invoke(
+            [
+                SystemMessage(
+                    content=(
+                        "Write one or two plain-text sentences explaining only the "
+                        "supplied recommendation. Do not include headings, policy IDs, "
+                        "severity labels, weather tables, markdown, or new advice."
+                    )
+                ),
+                HumanMessage(content=facts),
+            ]
+        )
+    )
     generated = _extract_generated_text(result.content)
     return f"{citation}\n{generated if _is_recommendation_only(generated) else sop['advice']}"

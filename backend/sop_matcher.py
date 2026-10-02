@@ -1,11 +1,17 @@
 from __future__ import annotations
+
 from typing import Any
 
 
 ALIASES = {
-    "bicycling": "cycling", "bike_ride": "cycling", "biking": "cycling",
-    "jogging": "running", "outdoor_exercise": "running", "exercise_outdoors": "running",
-    "senior": "older_adult", "infant": "child",
+    "bicycling": "cycling",
+    "bike_ride": "cycling",
+    "biking": "cycling",
+    "jogging": "running",
+    "outdoor_exercise": "running",
+    "exercise_outdoors": "running",
+    "senior": "older_adult",
+    "infant": "child",
 }
 
 
@@ -16,14 +22,22 @@ def _value(context: dict[str, Any], weather: dict[str, Any], field: str) -> Any:
 def _condition(condition: dict[str, Any], context: dict[str, Any], weather: dict[str, Any]) -> bool:
     actual = _value(context, weather, condition.get("field", ""))
     operator, expected = condition.get("operator"), condition.get("value")
-    if actual is None: return False
-    if operator in ("equals", "=="): return actual == expected
-    if operator == ">": return actual > expected
-    if operator == ">=": return actual >= expected
-    if operator == "<": return actual < expected
-    if operator == "<=": return actual <= expected
-    if operator in ("in", "membership"): return actual in expected
-    if operator == "between": return condition["min"] <= actual <= condition["max"]
+    if actual is None:
+        return False
+    if operator in ("equals", "=="):
+        return actual == expected
+    if operator == ">":
+        return actual > expected
+    if operator == ">=":
+        return actual >= expected
+    if operator == "<":
+        return actual < expected
+    if operator == "<=":
+        return actual <= expected
+    if operator in ("in", "membership"):
+        return actual in expected
+    if operator == "between":
+        return condition["min"] <= actual <= condition["max"]
     return False
 
 
@@ -35,7 +49,10 @@ def _matches(sop: dict[str, Any], context: dict[str, Any], weather: dict[str, An
             matches_outdoor_scope = key == "activity_any" and "outdoor_activity" in allowed and any(
                 ALIASES.get(value, value) in known_activities for value in values if value
             )
-            if not matches_outdoor_scope and not any(ALIASES.get(value, value) in allowed for value in values if value): return False
+            if not matches_outdoor_scope and not any(
+                ALIASES.get(value, value) in allowed for value in values if value
+            ):
+                return False
     if "all" in conditions and not all(_condition(item, context, weather) for item in conditions["all"]): return False
     if "any" in conditions and not any(_condition(item, context, weather) for item in conditions["any"]): return False
     return True
@@ -48,7 +65,11 @@ def match_sops(context: dict[str, Any], weather: dict[str, Any], config: dict[st
         for activity in sop.get("conditions", {}).get("activity_any", [])
         if activity != "outdoor_activity"
     }
-    return [sop for sop in config["sops"] if _matches(sop, context, weather, known_activities)]
+    return [
+        sop
+        for sop in config["sops"]
+        if _matches(sop, context, weather, known_activities)
+    ]
 
 
 def select_sop(matches: list[dict[str, Any]], severity_order: dict[str, int]) -> dict[str, Any] | None:

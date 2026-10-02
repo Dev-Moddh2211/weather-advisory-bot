@@ -1,5 +1,7 @@
-from pydantic import BaseModel
+from __future__ import annotations
+
 import httpx
+from pydantic import BaseModel
 
 
 class GeocodingResult(BaseModel):
@@ -14,7 +16,10 @@ class GeocodingError(RuntimeError):
     pass
 
 
-async def geocode_location(location: str, client: httpx.AsyncClient | None = None) -> GeocodingResult:
+async def geocode_location(
+    location: str,
+    client: httpx.AsyncClient | None = None,
+) -> GeocodingResult:
     params = {"name": location, "count": 1, "language": "en", "format": "json"}
     owns_client = client is None
     client = client or httpx.AsyncClient(timeout=10)

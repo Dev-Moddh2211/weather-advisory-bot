@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
 import httpx
 from pydantic import BaseModel, Field
 
@@ -48,23 +49,40 @@ def _location_now(timezone_name: str) -> datetime:
 
 
 def weather_condition(code: int) -> str:
-    if code == 0: return "clear"
-    if code in (1, 2, 3): return "cloudy"
-    if code in (45, 48): return "fog"
-    if code in (51, 53, 55, 56, 57): return "drizzle"
-    if code in (61, 63, 65, 66, 67, 80, 81, 82): return "rain"
-    if code in (71, 73, 75, 77, 85, 86): return "snow"
-    if code in (95, 96, 99): return "thunderstorm"
+    if code == 0:
+        return "clear"
+    if code in (1, 2, 3):
+        return "cloudy"
+    if code in (45, 48):
+        return "fog"
+    if code in (51, 53, 55, 56, 57):
+        return "drizzle"
+    if code in (61, 63, 65, 66, 67, 80, 81, 82):
+        return "rain"
+    if code in (71, 73, 75, 77, 85, 86):
+        return "snow"
+    if code in (95, 96, 99):
+        return "thunderstorm"
     return "unknown"
 
 
-async def fetch_weather(latitude: float, longitude: float, requested_time: str = "now", client: httpx.AsyncClient | None = None) -> WeatherData:
+async def fetch_weather(
+    latitude: float,
+    longitude: float,
+    requested_time: str = "now",
+    client: httpx.AsyncClient | None = None,
+) -> WeatherData:
     requested = (requested_time or "now").strip().lower()
     current_request = requested in {"", "now", "right now", "current"}
     params = {"latitude": latitude, "longitude": longitude, "timezone": "auto", "forecast_days": 2}
-    params["hourly"] = "temperature_2m,wind_speed_10m,precipitation,rain,precipitation_probability,uv_index,weather_code"
+    params["hourly"] = (
+        "temperature_2m,wind_speed_10m,precipitation,rain,"
+        "precipitation_probability,uv_index,weather_code"
+    )
     if current_request:
-        params["current"] = "temperature_2m,wind_speed_10m,precipitation,weather_code"
+        params["current"] = (
+            "temperature_2m,wind_speed_10m,precipitation,weather_code"
+        )
     owns_client = client is None
     client = client or httpx.AsyncClient(timeout=15)
     try:
@@ -81,14 +99,44 @@ async def fetch_weather(latitude: float, longitude: float, requested_time: str =
                 raise WeatherError("The requested forecast time is unavailable.")
             target_hour = _target_hour(requested)
             index = min(candidates, key=lambda i: abs(int(hourly["time"][i][11:13]) - target_hour))
-            values = {key: hourly[key][index] for key in ("time", "temperature_2m", "wind_speed_10m", "precipitation", "precipitation_probability", "uv_index", "weather_code")}
+            values = {
+                key: hourly[key][index]
+                for key in (
+                    "time",
+                    "temperature_2m",
+                    "wind_speed_10m",
+                    "precipitation",
+                    "precipitation_probability",
+                    "uv_index",
+                    "weather_code",
+                )
+            }
         else:
             current = payload["current"]
             hourly = payload.get("hourly", {})
             hourly_times = hourly.get("time", [])
             hourly_index = _nearest_hourly_index(hourly_times, current["time"]) if hourly_times else 0
-            values = {"time": current["time"], "temperature_2m": current["temperature_2m"], "wind_speed_10m": current["wind_speed_10m"], "precipitation": current["precipitation"], "precipitation_probability": hourly.get("precipitation_probability", [0])[hourly_index], "uv_index": hourly.get("uv_index", [0])[hourly_index], "weather_code": current["weather_code"]}
-        return WeatherData(timestamp=values["time"], temperature_c=values["temperature_2m"], wind_speed_kmh=values["wind_speed_10m"], precipitation_mm=values["precipitation"], precipitation_probability_pct=values["precipitation_probability"], uv_index=values["uv_index"], weather_condition=weather_condition(values["weather_code"]), raw_payload=payload)
+            values = {
+                "time": current["time"],
+                "temperature_2m": current["temperature_2m"],
+                "wind_speed_10m": current["wind_speed_10m"],
+                "precipitation": current["precipitation"],
+                "precipitation_probability": hourly.get(
+                    "precipitation_probability", [0]
+                )[hourly_index],
+                "uv_index": hourly.get("uv_index", [0])[hourly_index],
+                "weather_code": current["weather_code"],
+            }
+        return WeatherData(
+            timestamp=values["time"],
+            temperature_c=values["temperature_2m"],
+            wind_speed_kmh=values["wind_speed_10m"],
+            precipitation_mm=values["precipitation"],
+            precipitation_probability_pct=values["precipitation_probability"],
+            uv_index=values["uv_index"],
+            weather_condition=weather_condition(values["weather_code"]),
+            raw_payload=payload,
+        )
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
         raise WeatherError("Live weather could not be retrieved.") from exc
     finally:

@@ -67,5 +67,4 @@ def gemini_model_name() -> str:
     model_name = os.getenv("GEMINI_MODEL", "").strip()
     if not model_name:
         raise GeminiConfigurationError("GEMINI_MODEL is not configured.")
-    print(f">>> GEMINI_MODEL = {model_name!r}")
     return model_name

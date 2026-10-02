@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +40,23 @@ class ChatRequest(BaseModel):
 @app.post("/chat")
 async def chat(request: ChatRequest):
     state = {"messages": [{"role": "user", "content": request.message}]}
-    result = await workflow.ainvoke(state, config={"configurable": {"thread_id": request.session_id}})
+    result = await workflow.ainvoke(
+        state,
+        config={"configurable": {"thread_id": request.session_id}},
+    )
     selected = result.get("selected_sop") or {}
-    return {**{key: result[key] for key in ("answer", "location", "requested_time", "matched_sops", "selected_sop", "weather", "error_type", "error") if key in result}, "sop_id": selected.get("id"), "severity": selected.get("severity")}
+    response_fields = (
+        "answer",
+        "location",
+        "requested_time",
+        "matched_sops",
+        "selected_sop",
+        "weather",
+        "error_type",
+        "error",
+    )
+    return {
+        **{key: result[key] for key in response_fields if key in result},
+        "sop_id": selected.get("id"),
+        "severity": selected.get("severity"),
+    }
