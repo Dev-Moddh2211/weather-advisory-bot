@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import inspect
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -287,6 +288,48 @@ def test_picnic_matches_comfortable_conditions():
     assert selected["id"] == "SOP-010" and selected["severity"] == "LOW"
 
 
+def test_picnic_uses_generic_yaml_fuzzy_policy():
+    config, matches, selected = evaluate_sop(
+        "picnic",
+        case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=10),
+    )
+    picnic = next(sop for sop in config["sops"] if sop["id"] == "SOP-010")
+    fuzzy = picnic["conditions"]["fuzzy"]
+    assert len(fuzzy["signals"]) == 3 and fuzzy["minimum_score"] == 0.75
+    assert selected["id"] == "SOP-010" and "SOP-010" in [item["id"] for item in matches]
+    with patch.dict(os.environ, {"GEMINI_API_KEY": ""}):
+        assert "SOP-010" in graph.generate_response({"selected_sop": selected, "weather": case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=10)})
+    assert "picnic" not in inspect.getsource(sop_matcher)
+
+    _, matches, selected = evaluate_sop(
+        "picnic",
+        case_weather(temperature_c=24, wind_speed_kmh=8, precipitation_probability_pct=80),
+    )
+    assert "SOP-010" not in [item["id"] for item in matches] and selected is None
+
+    extra = {
+        "id": "SOP-FUZZY-TEST",
+        "name": "Generic fuzzy fixture",
+        "conditions": {
+            "activity_any": ["test_activity"],
+            "fuzzy": {
+                "minimum_score": 0.5,
+                "signals": [
+                    {"field": "temperature_c", "membership": {"kind": "ascending", "points": [0, 10]}, "weight": 1},
+                    {"field": "wind_speed_kmh", "membership": {"kind": "descending", "points": [0, 10]}, "weight": 1},
+                ],
+            },
+        },
+        "severity": "LOW",
+        "advice": "fixture",
+        "priority": 1,
+    }
+    test_config = dict(config)
+    test_config["sops"] = [*config["sops"], extra]
+    matches = sop_matcher.match_sops({"activity": "test_activity"}, case_weather(temperature_c=8, wind_speed_kmh=2), test_config)
+    assert "SOP-FUZZY-TEST" in [item["id"] for item in matches]
+
+
 def test_general_outdoor_exercise_matches_heat():
     _, _, selected = evaluate_sop("outdoor_exercise", case_weather(temperature_c=32, wind_speed_kmh=5))
     assert selected["id"] == "SOP-003"
@@ -360,6 +403,36 @@ def test_intake_uses_canonical_activities_without_policy_authority():
         assert "never provide safety advice" in captured["prompt"]
     finally:
         graph.ChatGoogleGenerativeAI = original_model
+
+
+def test_intake_preserves_unsupported_activity_and_no_match_is_generic():
+    class FakeModel:
+        def with_structured_output(self, _schema): return self
+        def invoke(self, prompt):
+            assert "fly a kite" in prompt or "preserve" in prompt
+            return graph.Intent(activity="kite_flying", intent="outdoor_activity", location="Delhi", requested_time="today", activity_confidence=1)
+
+    original_model = graph.ChatGoogleGenerativeAI
+    graph.ChatGoogleGenerativeAI = lambda **kwargs: FakeModel()
+    try:
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "fixture", "GEMINI_MODEL": "fixture-model"}):
+            result = graph.analyze_question({"messages": [{"role": "user", "content": "Is it safe to fly a kite in Delhi today?"}]})
+        assert result["activity"] == "kite_flying"
+        _, matches, selected = evaluate_sop("kite_flying", case_weather())
+        assert matches == [] and selected is None
+        assert "don't have" in graph.no_guidance_node({"selected_sop": selected})["answer"].lower()
+    finally:
+        graph.ChatGoogleGenerativeAI = original_model
+
+
+def test_other_unsupported_activity_has_no_match():
+    _, matches, selected = evaluate_sop("badminton", case_weather())
+    assert matches == [] and selected is None
+
+
+def test_running_paraphrase_activity_remains_supported():
+    _, _, selected = evaluate_sop("running", case_weather(temperature_c=32, wind_speed_kmh=8, precipitation_probability_pct=0))
+    assert selected["id"] == "SOP-003"
 
 
 def test_thunderstorm_policy_applies_to_supported_activities_only():
@@ -499,6 +572,7 @@ TESTS = [
     ("T11", test_new_yaml_policy_loads_without_control_flow_changes),
     ("T12", test_repository_does_not_expose_credentials),
     ("T13", test_picnic_matches_comfortable_conditions),
+    ("T13A", test_picnic_uses_generic_yaml_fuzzy_policy),
     ("T14", test_general_outdoor_exercise_matches_heat),
     ("T15", test_evening_forecast_uses_evening_hour),
     ("T16", test_response_contains_sop_citation_without_gemini),
@@ -507,6 +581,9 @@ TESTS = [
     ("T19", test_hot_picnic_has_no_applicable_policy),
     ("T20", test_thunderstorm_policy_overrides_picnic),
     ("T21", test_intake_uses_canonical_activities_without_policy_authority),
+    ("T21A", test_intake_preserves_unsupported_activity_and_no_match_is_generic),
+    ("T21B", test_other_unsupported_activity_has_no_match),
+    ("T21C", test_running_paraphrase_activity_remains_supported),
     ("T22", test_thunderstorm_policy_applies_to_supported_activities_only),
     ("T23", test_current_weather_uses_current_hour_values),
     ("T24", test_running_policy_changes_at_temperature_boundaries),

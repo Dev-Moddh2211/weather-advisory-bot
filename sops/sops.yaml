@@ -146,23 +146,30 @@ sops:
   - id: SOP-010
     name: Suitable conditions for a picnic
     category: General Outdoor Activities
-    description: A picnic is more suitable when rain is unlikely, winds are light, and the temperature is comfortable.
+    description: A picnic is more suitable when the combined weather context feels comfortable, dry, and calm.
     policy_note: >
-      This policy intentionally combines several weather factors because
-      "good for a picnic" does not have one obvious threshold.
+      This policy uses weighted fuzzy membership across temperature, rain
+      likelihood, and wind rather than one numeric threshold.
     conditions:
       activity_any: [picnic]
-      all:
-        - field: temperature_c
-          operator: between
-          min: 18
-          max: 32
-        - field: precipitation_probability_pct
-          operator: "<"
-          value: 30
-        - field: wind_speed_kmh
-          operator: "<"
-          value: 25
+      fuzzy:
+        minimum_score: 0.75
+        signals:
+          - field: temperature_c
+            membership:
+              kind: trapezoid
+              points: [15, 20, 30, 34]
+            weight: 0.3
+          - field: precipitation_probability_pct
+            membership:
+              kind: descending
+              points: [10, 50]
+            weight: 0.3
+          - field: wind_speed_kmh
+            membership:
+              kind: descending
+              points: [12, 30]
+            weight: 0.4
     severity: LOW
     advice: This looks like a reasonable day for a picnic. Take basic sun or rain protection and check the forecast again before you leave.
     priority: 40

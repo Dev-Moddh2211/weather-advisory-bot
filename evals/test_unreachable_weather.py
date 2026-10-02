@@ -24,7 +24,7 @@ async def test_unreachable_weather_is_error_not_no_match() -> None:
 
     assert result["error_type"] == "weather"
     assert "weather" in result["error"].lower()
-    assert "matched_sops" not in result
+    assert result["matched_sops"] == []
     assert result.get("selected_sop") is None
 
 

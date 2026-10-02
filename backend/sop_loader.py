@@ -25,6 +25,38 @@ class ConditionModel(BaseModel):
         return self
 
 
+class FuzzyMembershipModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["ascending", "descending", "triangle", "trapezoid"]
+    points: list[float] = Field(min_length=2, max_length=4)
+
+    @model_validator(mode="after")
+    def validate_points(self):
+        expected = {"ascending": 2, "descending": 2, "triangle": 3, "trapezoid": 4}[self.kind]
+        if len(self.points) != expected or any(left >= right for left, right in zip(self.points, self.points[1:])):
+            raise ValueError(f"{self.kind} requires {expected} ordered points")
+        return self
+
+
+class FuzzySignalModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    field: str
+    membership: FuzzyMembershipModel
+    weight: float = Field(gt=0)
+
+
+class FuzzyConditionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    minimum_score: float = Field(ge=0, le=1)
+    signals: list[FuzzySignalModel] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_weights(self):
+        if sum(signal.weight for signal in self.signals) <= 0:
+            raise ValueError("fuzzy signal weights must be positive")
+        return self
+
+
 class ConditionsModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
     activity_any: list[str] | None = None
@@ -32,6 +64,7 @@ class ConditionsModel(BaseModel):
     group_any: list[str] | None = None
     all: list[ConditionModel] | None = None
     any: list[ConditionModel] | None = None
+    fuzzy: FuzzyConditionModel | None = None
 
 
 class SOPModel(BaseModel):

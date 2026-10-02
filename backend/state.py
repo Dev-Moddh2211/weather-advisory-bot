@@ -16,6 +16,10 @@ class Weather(TypedDict, total=False):
 
 class AdvisoryState(TypedDict, total=False):
     messages: Annotated[list, add_messages]
+    # Conversation memory is deliberately separate from facts derived for the
+    # current request.  Request-boundary reset preserves only these fields.
+    conversation_location: str
+    conversation_activity: str
     location: str
     latitude: float
     longitude: float

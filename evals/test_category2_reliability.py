@@ -45,6 +45,29 @@ def test_post_chat_runs_real_graph_pipeline_and_cites_policy():
     assert "46" not in payload["answer"] or payload["weather"]["wind_speed_kmh"] == 46
 
 
+def test_post_chat_unsupported_activity_reaches_no_match():
+    async def fake_geo(location):
+        return GeocodingResult(name=location, latitude=28.6, longitude=77.2)
+
+    async def fake_weather(*args, **kwargs):
+        return fixture_weather(wind_speed_kmh=8)
+
+    def fake_intake(state):
+        return {"activity": "kite_flying", "intent": "outdoor_activity", "location": "Delhi", "requested_time": "today"}
+
+    with patch.object(graph, "analyze_question", fake_intake), patch.object(graph, "geocode_location", fake_geo), patch.object(graph, "fetch_weather", fake_weather):
+        original = main.workflow
+        main.workflow = graph.build_graph()
+        try:
+            response = TestClient(main.app).post("/chat", json={"session_id": "unsupported", "message": "Is it safe to fly a kite in Delhi today?"})
+        finally:
+            main.workflow = original
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sop_id"] is None
+    assert "don't have a specific weather-safety policy" in payload["answer"]
+
+
 def test_two_paraphrases_enter_through_intake(monkeypatch):
     cases = {
         "Would riding my bike to the office be a bad idea?": "cycling",
@@ -80,4 +103,4 @@ def test_weather_failure_does_not_continue_to_matching():
         result = asyncio.run(graph.fetch_weather_node({"latitude": 1, "longitude": 2}))
     assert result["error_type"] == "weather"
     assert "weather" in result["error"].lower()
-    assert "matched_sops" not in result
+    assert result["matched_sops"] == []

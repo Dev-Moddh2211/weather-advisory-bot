@@ -26,10 +26,22 @@ load_dotenv()
 
 
 class Intent(BaseModel):
-    activity: str | None = None
+    activity: str | None = Field(
+        default=None,
+        description=(
+            "The user's actual requested activity. Normalize only genuine synonyms; "
+            "do not broaden it into a related outdoor or exercise category."
+        ),
+    )
     intent: str | None = None
     user_group: str | None = None
-    location: str | None = None
+    location: str | None = Field(
+        default=None,
+        description=(
+            "Canonical place name for the request. Remove relational wording such as "
+            "near, around, in, within, or area, while preserving the place itself."
+        ),
+    )
     requested_time: str = "now"
     is_follow_up: bool = False
     activity_confidence: float | None = Field(default=None, ge=0, le=1)
@@ -39,6 +51,34 @@ class Intent(BaseModel):
 MISSING_LOCATION_ERROR = (
     "I need a location to check the weather for this request."
 )
+
+
+REQUEST_FIELDS_TO_RESET = {
+    "location": None,
+    "latitude": None,
+    "longitude": None,
+    "activity": None,
+    "intent": None,
+    "user_group": None,
+    "requested_time": None,
+    "is_follow_up": False,
+    "weather": None,
+    "raw_weather": None,
+    "matched_sops": [],
+    "selected_sop": None,
+    "situational": False,
+    "situational_sop_id": None,
+    "override": False,
+    "severity": None,
+    "answer": None,
+    "error_type": None,
+    "error": None,
+}
+
+
+def reset_request_state(state: AdvisoryState) -> dict[str, Any]:
+    """Start a new request without discarding conversation memory/messages."""
+    return dict(REQUEST_FIELDS_TO_RESET)
 
 
 def analyze_question(state: AdvisoryState) -> dict[str, Any]:
@@ -70,16 +110,18 @@ def analyze_question(state: AdvisoryState) -> dict[str, Any]:
     prompt = f"""
 Extract request context only; never provide safety advice and never evaluate a policy.
 
-    Return activity as one canonical activity from this repository-supported vocabulary when
-    the user's meaning clearly matches one of them: {supported_activities}. If the request
-    names an unsupported activity such as fishing, preserve that distinction by returning
-    null rather than mapping it to a supported activity.
-Normalize paraphrases to the underlying activity rather than copying surface wording.
-For example, an outdoor meal or spending time outside with food and friends can mean
-the canonical activity 'picnic' when that is clearly the request. Do not classify every
-outdoor activity as a picnic: cycling, running, walking, fishing, and an unspecified
-request to go outside remain distinct or null. If the activity is genuinely ambiguous,
-return null. Do not invent activities, SOP IDs, rules, weather values, or recommendations.
+    Preserve the user's actual requested activity as a concise normalized literal. Normalize
+equivalent wording only when it genuinely refers to the same activity; do not broaden an
+activity into a related category. Do not classify an activity as exercise merely because
+it happens outdoors, and do not map an unsupported activity to the closest supported SOP.
+Keep the user's intent separate from the activity: travel or commuting remains travel even
+when it uses a vehicle, and the user group must be extracted independently. Unsupported
+activities remain unsupported.
+Examples: "ride my bike" -> cycling, "go jogging" -> jogging, "run outside" -> running,
+"fly a kite" -> kite_flying, and "play badminton" -> badminton. An outdoor meal or
+spending time outside with food and friends can be "picnic" when clearly requested.
+If the activity is genuinely ambiguous, return null. Do not invent SOP IDs, rules, weather
+values, or recommendations. Supported SOP activities for reference are: {supported_activities}.
 
     Include activity_confidence from 0 to 1 and set activity_is_ambiguous=true when the
     activity is unclear. Do not claim high confidence for a vague request such as merely
@@ -93,35 +135,56 @@ Latest message: {message}
     except GeminiUnavailableError as exc:
         return {"error_type": "gemini", "error": str(exc)}
     values = intent.model_dump(exclude_none=True)
-    supported = set(supported_activities)
-    activity = values.get("activity")
-    if values.get("activity_is_ambiguous") or (activity and activity not in supported):
+    if values.get("activity_is_ambiguous"):
         values["activity"] = None
     if (
         values.get("activity_confidence") is not None
         and values["activity_confidence"] < 0.6
     ):
         values["activity"] = None
-    if not values.get("location") and state.get("location"):
-        values["location"] = state["location"]
-    if not values.get("activity") and state.get("activity"):
-        values["activity"] = state["activity"]
+    if values.get("is_follow_up"):
+        if not values.get("location") and state.get("conversation_location"):
+            values["location"] = state["conversation_location"]
+        if not values.get("activity") and state.get("conversation_activity"):
+            values["activity"] = state["conversation_activity"]
     return values
 
 
 async def resolve_location(state: AdvisoryState) -> dict[str, Any]:
     location = (state.get("location") or "").strip()
     if not location:
-        return {"error_type": "location", "error": MISSING_LOCATION_ERROR}
+        return {
+            "weather": None,
+            "raw_weather": None,
+            "matched_sops": [],
+            "selected_sop": None,
+            "situational": False,
+            "situational_sop_id": None,
+            "override": False,
+            "error_type": "location",
+            "error": MISSING_LOCATION_ERROR,
+        }
     try:
         result = await geocode_location(location)
         return {
             "location": result.name,
             "latitude": result.latitude,
             "longitude": result.longitude,
+            "conversation_location": result.name,
+            "conversation_activity": state.get("activity"),
         }
     except GeocodingError as exc:
-        return {"error_type": "location", "error": str(exc)}
+        return {
+            "weather": None,
+            "raw_weather": None,
+            "matched_sops": [],
+            "selected_sop": None,
+            "situational": False,
+            "situational_sop_id": None,
+            "override": False,
+            "error_type": "location",
+            "error": str(exc),
+        }
 
 
 async def fetch_weather_node(state: AdvisoryState) -> dict[str, Any]:
@@ -136,7 +199,17 @@ async def fetch_weather_node(state: AdvisoryState) -> dict[str, Any]:
             "raw_weather": weather.raw_payload,
         }
     except WeatherError as exc:
-        return {"error_type": "weather", "error": str(exc)}
+        return {
+            "weather": None,
+            "raw_weather": None,
+            "matched_sops": [],
+            "selected_sop": None,
+            "situational": False,
+            "situational_sop_id": None,
+            "override": False,
+            "error_type": "weather",
+            "error": str(exc),
+        }
 
 
 def route_error(state: AdvisoryState) -> str:
@@ -214,7 +287,9 @@ def build_graph():
     )
     for name, fn in nodes:
         graph.add_node(name, fn)
-    graph.add_edge(START, "analyze_question")
+    graph.add_node("reset_request_state", reset_request_state)
+    graph.add_edge(START, "reset_request_state")
+    graph.add_edge("reset_request_state", "analyze_question")
     graph.add_conditional_edges("analyze_question", route_error, {"error": "error", "ok": "resolve_location"})
     graph.add_conditional_edges("resolve_location", route_error, {"error": "error", "ok": "fetch_weather"})
     graph.add_conditional_edges("fetch_weather", route_error, {"error": "error", "ok": "match_sops"})
